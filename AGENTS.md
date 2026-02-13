@@ -2,6 +2,17 @@
 
 此文件供在此仓库中工作的 AI 代理（如你自己）使用。包含构建/检查命令和代码风格指南。
 
+## 技术栈
+
+- Next.js 16（App Router）
+- React 19
+- TypeScript（strict）
+- Convex
+- Better Auth
+- Tailwind CSS v4
+- shadcn/ui
+- Bun（包管理与脚本执行）
+
 ## 命令
 
 ### 开发
