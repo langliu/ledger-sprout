@@ -27,12 +27,19 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     emailAndPassword: {
       enabled: true,
     },
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google"],
+        updateUserInfoOnLink: true,
+      },
+    },
     plugins: [convex({ authConfig })],
     socialProviders: {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID as string,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-      }
+      },
     },
     trustedOrigins: [
       process.env.NEXT_PUBLIC_SITE_URL as string
