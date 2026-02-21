@@ -52,9 +52,12 @@ function toCurrency(minorUnits: number) {
 }
 
 function toDateLabel(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString("zh-CN", {
+  return new Date(timestamp).toLocaleString("zh-CN", {
+    year: "numeric",
     month: "short",
     day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   })
 }
 
@@ -191,7 +194,7 @@ export default function Page() {
     <LedgerShell
       title="数据总览"
       headerAction={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button asChild variant="outline" size="sm">
             <Link href="/transactions">查看流水</Link>
           </Button>
@@ -201,51 +204,51 @@ export default function Page() {
         </div>
       }
     >
-      <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardDescription>本月收入</CardDescription>
-            <CardTitle>{toCurrency(summary?.income ?? 0)}</CardTitle>
-          </CardHeader>
-          <CardFooter className="text-sm text-muted-foreground">
-            <IconArrowUpRight className="size-4 text-green-500" />
-            共 {summary?.transactionCount ?? 0} 笔记录
-          </CardFooter>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>本月支出</CardDescription>
-            <CardTitle>{toCurrency(summary?.expense ?? 0)}</CardTitle>
-          </CardHeader>
-          <CardFooter className="text-sm text-muted-foreground">
-            <IconArrowDownRight className="size-4 text-red-500" />
-            转账金额 {toCurrency(summary?.transfer ?? 0)}
-          </CardFooter>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>本月结余</CardDescription>
-            <CardTitle>{toCurrency(summary?.net ?? 0)}</CardTitle>
-          </CardHeader>
-          <CardFooter className="text-sm text-muted-foreground">
-            当前账本：{currentLedger.name}
-          </CardFooter>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>账户概览</CardDescription>
-            <CardTitle className="flex items-center gap-2">
-              <IconWallet className="size-5" />
-              {toCurrency(totalBalance)}
-            </CardTitle>
-          </CardHeader>
-          <CardFooter className="text-sm text-muted-foreground">
-            活跃账户 {activeAccountCount} 个
-          </CardFooter>
-        </Card>
-      </div>
+      <div className="space-y-4 px-4 lg:space-y-6 lg:px-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Card>
+            <CardHeader>
+              <CardDescription>本月收入</CardDescription>
+              <CardTitle>{toCurrency(summary?.income ?? 0)}</CardTitle>
+            </CardHeader>
+            <CardFooter className="text-sm text-muted-foreground">
+              <IconArrowUpRight className="size-4 text-green-500" />
+              共 {summary?.transactionCount ?? 0} 笔记录
+            </CardFooter>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>本月支出</CardDescription>
+              <CardTitle>{toCurrency(summary?.expense ?? 0)}</CardTitle>
+            </CardHeader>
+            <CardFooter className="text-sm text-muted-foreground">
+              <IconArrowDownRight className="size-4 text-red-500" />
+              转账金额 {toCurrency(summary?.transfer ?? 0)}
+            </CardFooter>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>本月结余</CardDescription>
+              <CardTitle>{toCurrency(summary?.net ?? 0)}</CardTitle>
+            </CardHeader>
+            <CardFooter className="text-sm text-muted-foreground">
+              当前账本：{currentLedger.name}
+            </CardFooter>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>账户概览</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <IconWallet className="size-5" />
+                {toCurrency(totalBalance)}
+              </CardTitle>
+            </CardHeader>
+            <CardFooter className="text-sm text-muted-foreground">
+              活跃账户 {activeAccountCount} 个
+            </CardFooter>
+          </Card>
+        </div>
 
-      <div className="px-4 lg:px-6">
         <Card>
           <CardHeader>
             <CardTitle>近 30 天收支趋势</CardTitle>
@@ -307,9 +310,7 @@ export default function Page() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <div className="px-4 lg:px-6">
         <Card>
           <CardHeader>
             <CardTitle>最近流水</CardTitle>
@@ -319,10 +320,10 @@ export default function Page() {
             {!transactions || transactions.length === 0 ? (
               <div className="text-sm text-muted-foreground">暂无流水记录。</div>
             ) : (
-              <Table>
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>日期</TableHead>
+                    <TableHead>日期时间</TableHead>
                     <TableHead>类型</TableHead>
                     <TableHead>分类/账户</TableHead>
                     <TableHead className="text-right">金额</TableHead>

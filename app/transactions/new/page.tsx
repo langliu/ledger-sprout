@@ -7,6 +7,7 @@ import { useMutation, useQuery } from "convex/react"
 
 import { LedgerShell } from "@/components/ledger-shell"
 import type { Id } from "@/convex/_generated/dataModel"
+import { DateTimePicker } from "@/components/date-time-picker"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -39,10 +40,30 @@ function toMinorUnits(amountText: string) {
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
-function todayInputValue() {
+function nowMinuteTimestamp() {
   const now = new Date()
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
-  return local.toISOString().slice(0, 10)
+  now.setSeconds(0, 0)
+  return now.getTime()
+}
+
+function getTypeLabel(type: TransactionType) {
+  if (type === "expense") {
+    return "支出"
+  }
+  if (type === "income") {
+    return "收入"
+  }
+  return "转账"
+}
+
+function toDateTimeLabel(timestamp: number) {
+  return new Date(timestamp).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export default function NewTransactionPage() {
@@ -57,7 +78,7 @@ export default function NewTransactionPage() {
   const [toAccountId, setToAccountId] = useState<Id<"accounts"> | "">("")
   const [categoryId, setCategoryId] = useState<Id<"categories"> | "">("")
   const [amount, setAmount] = useState("")
-  const [occurredDate, setOccurredDate] = useState(todayInputValue)
+  const [occurredAt, setOccurredAt] = useState(nowMinuteTimestamp)
   const [note, setNote] = useState("")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -108,14 +129,29 @@ export default function NewTransactionPage() {
   }, [categories, categoryId, type])
 
   const canSubmit = useMemo(() => {
-    if (!currentLedger || !accountId || !amount || !occurredDate) {
+    if (!currentLedger || !accountId || !amount || occurredAt <= 0) {
       return false
     }
     if (type === "transfer") {
       return Boolean(toAccountId && toAccountId !== accountId)
     }
     return Boolean(categoryId)
-  }, [accountId, amount, categoryId, currentLedger, occurredDate, toAccountId, type])
+  }, [accountId, amount, categoryId, currentLedger, occurredAt, toAccountId, type])
+  const sourceAccountName = useMemo(() => {
+    return (accounts ?? []).find((account) => account._id === accountId)?.name ?? "-"
+  }, [accountId, accounts])
+  const targetAccountName = useMemo(() => {
+    if (type !== "transfer") {
+      return "-"
+    }
+    return (accounts ?? []).find((account) => account._id === toAccountId)?.name ?? "-"
+  }, [accounts, toAccountId, type])
+  const categoryName = useMemo(() => {
+    if (type === "transfer") {
+      return "-"
+    }
+    return (categories ?? []).find((category) => category._id === categoryId)?.name ?? "-"
+  }, [categories, categoryId, type])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -136,9 +172,8 @@ export default function NewTransactionPage() {
       return
     }
 
-    const occurredAt = new Date(`${occurredDate}T00:00:00`).getTime()
-    if (Number.isNaN(occurredAt) || occurredAt <= 0) {
-      setErrorMessage("日期格式不正确。")
+    if (!Number.isFinite(occurredAt) || occurredAt <= 0) {
+      setErrorMessage("日期时间格式不正确。")
       return
     }
 
@@ -252,14 +287,14 @@ export default function NewTransactionPage() {
         </Button>
       }
     >
-      <div className="px-4 lg:px-6">
-        <Card className="max-w-2xl">
+      <div className="grid grid-cols-1 gap-4 px-4 lg:px-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Card>
           <CardHeader>
             <CardTitle>记一笔</CardTitle>
             <CardDescription>金额单位为元，系统会按分存储避免精度误差。</CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="space-y-4" onSubmit={handleSubmit}>
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="type">类型</Label>
@@ -354,16 +389,8 @@ export default function NewTransactionPage() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="occurredDate">日期</Label>
-                  <Input
-                    id="occurredDate"
-                    type="date"
-                    value={occurredDate}
-                    onChange={(event) => {
-                      setOccurredDate(event.target.value)
-                    }}
-                    required
-                  />
+                  <Label>日期时间</Label>
+                  <DateTimePicker value={occurredAt} onChange={setOccurredAt} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="note">备注</Label>
@@ -386,6 +413,46 @@ export default function NewTransactionPage() {
                 </Button>
               </CardFooter>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit xl:sticky xl:top-24">
+          <CardHeader>
+            <CardTitle>录入预览</CardTitle>
+            <CardDescription>提交前可快速确认关键信息。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">类型</span>
+              <span className="font-medium">{getTypeLabel(type)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">金额</span>
+              <span className="font-medium">{amount.trim() || "-"}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">时间</span>
+              <span className="font-medium">{toDateTimeLabel(occurredAt)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">账户</span>
+              <span className="font-medium">{sourceAccountName}</span>
+            </div>
+            {type === "transfer" ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">转入账户</span>
+                <span className="font-medium">{targetAccountName}</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">分类</span>
+                <span className="font-medium">{categoryName}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">备注</span>
+              <span className="max-w-[65%] truncate font-medium">{note.trim() || "-"}</span>
+            </div>
           </CardContent>
         </Card>
       </div>

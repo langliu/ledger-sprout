@@ -6,6 +6,8 @@ import { useMutation, useQuery } from "convex/react"
 
 import type { Doc, Id } from "@/convex/_generated/dataModel"
 import { api } from "@/convex/_generated/api"
+import { DatePicker } from "@/components/date-picker"
+import { DateTimePicker } from "@/components/date-time-picker"
 import { LedgerShell } from "@/components/ledger-shell"
 import { Button } from "@/components/ui/button"
 import {
@@ -51,11 +53,13 @@ function toMinorUnits(amountText: string) {
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
-function toDateLabel(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString("zh-CN", {
+function toDateTimeLabel(timestamp: number) {
+  return new Date(timestamp).toLocaleString("zh-CN", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   })
 }
 
@@ -73,12 +77,6 @@ function toDayEndTimestamp(dateText: string) {
   }
   const ts = new Date(`${dateText}T23:59:59`).getTime()
   return Number.isNaN(ts) ? undefined : ts
-}
-
-function toDateInputValue(timestamp: number) {
-  const date = new Date(timestamp)
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-  return local.toISOString().slice(0, 10)
 }
 
 function getTypeLabel(type: "expense" | "income" | "transfer") {
@@ -108,7 +106,7 @@ export default function TransactionsPage() {
   const [editingAccountId, setEditingAccountId] = useState<Id<"accounts"> | "">("")
   const [editingTransferAccountId, setEditingTransferAccountId] = useState<Id<"accounts"> | "">("")
   const [editingAmount, setEditingAmount] = useState("")
-  const [editingOccurredDate, setEditingOccurredDate] = useState("")
+  const [editingOccurredAt, setEditingOccurredAt] = useState<number | null>(null)
   const [editingCategoryId, setEditingCategoryId] = useState<Id<"categories"> | "">("")
   const [editingNote, setEditingNote] = useState("")
   const [editingOriginalNote, setEditingOriginalNote] = useState("")
@@ -157,6 +155,16 @@ export default function TransactionsPage() {
     }
     return accounts.filter((account) => account._id !== editingAccountId)
   }, [accounts, editingAccountId, editingType])
+  const activeFilterCount = useMemo(() => {
+    return [
+      type !== "all",
+      Boolean(filterAccountId),
+      Boolean(filterCategoryId),
+      Boolean(filterFromDate),
+      Boolean(filterToDate),
+      search.trim().length > 0,
+    ].filter(Boolean).length
+  }, [filterAccountId, filterCategoryId, filterFromDate, filterToDate, search, type])
 
   useEffect(() => {
     if (editingType !== "transfer") {
@@ -179,7 +187,7 @@ export default function TransactionsPage() {
     setEditingAccountId(transaction.accountId)
     setEditingTransferAccountId(transaction.transferAccountId ?? "")
     setEditingAmount((transaction.amount / 100).toFixed(2))
-    setEditingOccurredDate(toDateInputValue(transaction.occurredAt))
+    setEditingOccurredAt(transaction.occurredAt)
     setEditingCategoryId(transaction.categoryId ?? "")
     const note = transaction.note ?? ""
     setEditingNote(note)
@@ -203,6 +211,7 @@ export default function TransactionsPage() {
         setEditingType(null)
         setEditingAccountId("")
         setEditingTransferAccountId("")
+        setEditingOccurredAt(null)
         setEditingOriginalNote("")
       }
     } catch (error: unknown) {
@@ -231,9 +240,8 @@ export default function TransactionsPage() {
       return
     }
 
-    const occurredAt = new Date(`${editingOccurredDate}T00:00:00`).getTime()
-    if (Number.isNaN(occurredAt) || occurredAt <= 0) {
-      setErrorMessage("日期格式不正确。")
+    if (!editingOccurredAt || !Number.isFinite(editingOccurredAt) || editingOccurredAt <= 0) {
+      setErrorMessage("日期时间格式不正确。")
       return
     }
 
@@ -264,7 +272,7 @@ export default function TransactionsPage() {
           ? { transferAccountId: editingTransferAccountId as Id<"accounts"> }
           : {}),
         amount,
-        occurredAt,
+        occurredAt: editingOccurredAt,
         ...(editingType !== "transfer"
           ? { categoryId: editingCategoryId as Id<"categories"> }
           : {}),
@@ -278,6 +286,7 @@ export default function TransactionsPage() {
       setEditingType(null)
       setEditingAccountId("")
       setEditingTransferAccountId("")
+      setEditingOccurredAt(null)
       setEditingOriginalNote("")
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
@@ -344,274 +353,269 @@ export default function TransactionsPage() {
         </Button>
       }
     >
-      <div className="px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>流水筛选</CardTitle>
-            <CardDescription>支持按类型、账户、分类、日期区间和备注关键词过滤。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">类型</p>
-                <Select value={type} onValueChange={(value) => setType(value as TransactionFilter)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部</SelectItem>
-                    <SelectItem value="expense">支出</SelectItem>
-                    <SelectItem value="income">收入</SelectItem>
-                    <SelectItem value="transfer">转账</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">账户</p>
-                <Select
-                  value={filterAccountId || "all"}
-                  onValueChange={(value) =>
-                    setFilterAccountId(value === "all" ? "" : (value as Id<"accounts">))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部账户</SelectItem>
-                    {(accounts ?? []).map((account) => (
-                      <SelectItem key={account._id} value={account._id}>
-                        {account.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">分类</p>
-                <Select
-                  value={filterCategoryId || "all"}
-                  onValueChange={(value) =>
-                    setFilterCategoryId(value === "all" ? "" : (value as Id<"categories">))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">全部分类</SelectItem>
-                    {(categories ?? [])
-                      .filter((category) =>
-                        type === "all" || type === "transfer" ? true : category.type === type,
-                      )
-                      .map((category) => (
-                        <SelectItem key={category._id} value={category._id}>
-                          {category.name}
+      <div className="space-y-4 px-4 lg:space-y-6 lg:px-6">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <Card>
+            <CardHeader>
+              <CardTitle>流水筛选</CardTitle>
+              <CardDescription>支持按类型、账户、分类、日期区间和备注关键词过滤。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">类型</p>
+                  <Select value={type} onValueChange={(value) => setType(value as TransactionFilter)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部</SelectItem>
+                      <SelectItem value="expense">支出</SelectItem>
+                      <SelectItem value="income">收入</SelectItem>
+                      <SelectItem value="transfer">转账</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">账户</p>
+                  <Select
+                    value={filterAccountId || "all"}
+                    onValueChange={(value) =>
+                      setFilterAccountId(value === "all" ? "" : (value as Id<"accounts">))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部账户</SelectItem>
+                      {(accounts ?? []).map((account) => (
+                        <SelectItem key={account._id} value={account._id}>
+                          {account.name}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">开始日期</p>
-                <Input
-                  type="date"
-                  value={filterFromDate}
-                  onChange={(event) => {
-                    setFilterFromDate(event.target.value)
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">结束日期</p>
-                <Input
-                  type="date"
-                  value={filterToDate}
-                  onChange={(event) => {
-                    setFilterToDate(event.target.value)
-                  }}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-5">
-                <p className="text-sm text-muted-foreground">关键词（备注）</p>
-                <Input
-                  placeholder="例如：午饭、地铁、工资"
-                  value={search}
-                  onChange={(event) => {
-                    setSearch(event.target.value)
-                  }}
-                />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setType("all")
-                  setFilterAccountId("")
-                  setFilterCategoryId("")
-                  setFilterFromDate("")
-                  setFilterToDate("")
-                  setSearch("")
-                }}
-              >
-                重置筛选
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="px-4 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>编辑流水</CardTitle>
-            <CardDescription>
-              选择列表中的“编辑”可修改金额、日期、分类和备注。转账不支持修改分类。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {editingId ? (
-              <>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">类型</p>
-                    <Input value={getTypeLabel(editingType ?? "expense")} disabled />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">账户</p>
-                    <Select
-                      value={editingAccountId || undefined}
-                      onValueChange={(value) => setEditingAccountId(value as Id<"accounts">)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="请选择账户" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(accounts ?? []).map((account) => (
-                          <SelectItem key={account._id} value={account._id}>
-                            {account.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">金额（元）</p>
-                    <Input
-                      value={editingAmount}
-                      onChange={(event) => {
-                        setEditingAmount(event.target.value)
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-3">
-                    <p className="text-sm text-muted-foreground">日期</p>
-                    <Input
-                      type="date"
-                      value={editingOccurredDate}
-                      onChange={(event) => {
-                        setEditingOccurredDate(event.target.value)
-                      }}
-                    />
-                  </div>
+                    </SelectContent>
+                  </Select>
                 </div>
-
-                {editingType === "transfer" ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">转入账户</p>
-                    <Select
-                      value={editingTransferAccountId || undefined}
-                      onValueChange={(value) => setEditingTransferAccountId(value as Id<"accounts">)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="请选择转入账户" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {editableTransferAccounts.map((account) => (
-                          <SelectItem key={account._id} value={account._id}>
-                            {account.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-
-                {editingType !== "transfer" ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">分类</p>
-                    <Select
-                      value={editingCategoryId || undefined}
-                      onValueChange={(value) => setEditingCategoryId(value as Id<"categories">)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="请选择分类" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {editableCategories.map((category) => (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">分类</p>
+                  <Select
+                    value={filterCategoryId || "all"}
+                    onValueChange={(value) =>
+                      setFilterCategoryId(value === "all" ? "" : (value as Id<"categories">))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">全部分类</SelectItem>
+                      {(categories ?? [])
+                        .filter((category) =>
+                          type === "all" || type === "transfer" ? true : category.type === type,
+                        )
+                        .map((category) => (
                           <SelectItem key={category._id} value={category._id}>
                             {category.name}
                           </SelectItem>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">备注</p>
+                  <p className="text-sm text-muted-foreground">开始日期</p>
+                  <DatePicker value={filterFromDate} onChange={setFilterFromDate} />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">结束日期</p>
+                  <DatePicker value={filterToDate} onChange={setFilterToDate} />
+                </div>
+                <div className="space-y-2 sm:col-span-2 xl:col-span-5">
+                  <p className="text-sm text-muted-foreground">关键词（备注）</p>
                   <Input
-                    placeholder="删除全部内容后保存可清空备注"
-                    value={editingNote}
+                    placeholder="例如：午饭、地铁、工资"
+                    value={search}
                     onChange={(event) => {
-                      setEditingNote(event.target.value)
+                      setSearch(event.target.value)
                     }}
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button type="button" disabled={isSavingEdit} onClick={() => void handleSaveEdit()}>
-                    {isSavingEdit ? "保存中..." : "保存修改"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setEditingId(null)
-                      setEditingType(null)
-                      setEditingAccountId("")
-                      setEditingTransferAccountId("")
-                      setEditingOriginalNote("")
-                    }}
-                  >
-                    取消
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">请选择一条流水进入编辑模式。</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {activeFilterCount > 0 ? `已启用 ${activeFilterCount} 个筛选条件` : "当前未启用筛选条件"}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setType("all")
+                    setFilterAccountId("")
+                    setFilterCategoryId("")
+                    setFilterFromDate("")
+                    setFilterToDate("")
+                    setSearch("")
+                  }}
+                >
+                  重置筛选
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-      <div className="px-4 lg:px-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>编辑流水</CardTitle>
+              <CardDescription>
+                选择列表中的“编辑”可修改金额、日期时间、分类和备注。转账不支持修改分类。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {editingId ? (
+                <>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">类型</p>
+                      <Input value={getTypeLabel(editingType ?? "expense")} disabled />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">账户</p>
+                      <Select
+                        value={editingAccountId || undefined}
+                        onValueChange={(value) => setEditingAccountId(value as Id<"accounts">)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="请选择账户" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(accounts ?? []).map((account) => (
+                            <SelectItem key={account._id} value={account._id}>
+                              {account.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <p className="text-sm text-muted-foreground">金额（元）</p>
+                      <Input
+                        value={editingAmount}
+                        onChange={(event) => {
+                          setEditingAmount(event.target.value)
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <p className="text-sm text-muted-foreground">日期时间</p>
+                      <DateTimePicker value={editingOccurredAt} onChange={setEditingOccurredAt} />
+                    </div>
+                  </div>
+
+                  {editingType === "transfer" ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">转入账户</p>
+                      <Select
+                        value={editingTransferAccountId || undefined}
+                        onValueChange={(value) =>
+                          setEditingTransferAccountId(value as Id<"accounts">)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="请选择转入账户" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {editableTransferAccounts.map((account) => (
+                            <SelectItem key={account._id} value={account._id}>
+                              {account.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+
+                  {editingType !== "transfer" ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">分类</p>
+                      <Select
+                        value={editingCategoryId || undefined}
+                        onValueChange={(value) => setEditingCategoryId(value as Id<"categories">)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="请选择分类" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {editableCategories.map((category) => (
+                            <SelectItem key={category._id} value={category._id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">备注</p>
+                    <Input
+                      placeholder="删除全部内容后保存可清空备注"
+                      value={editingNote}
+                      onChange={(event) => {
+                        setEditingNote(event.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      disabled={isSavingEdit}
+                      onClick={() => void handleSaveEdit()}
+                    >
+                      {isSavingEdit ? "保存中..." : "保存修改"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingId(null)
+                        setEditingType(null)
+                        setEditingAccountId("")
+                        setEditingTransferAccountId("")
+                        setEditingOccurredAt(null)
+                        setEditingOriginalNote("")
+                      }}
+                    >
+                      取消
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  请选择一条流水进入编辑模式。
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle>流水列表</CardTitle>
-            <CardDescription>{transactions?.length ?? 0} 条记录</CardDescription>
+            <CardDescription>
+              {transactions?.length ?? 0} 条记录
+              {activeFilterCount > 0 ? ` · ${activeFilterCount} 个筛选条件生效` : ""}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {errorMessage ? <p className="mb-3 text-sm text-destructive">{errorMessage}</p> : null}
             {!transactions || transactions.length === 0 ? (
               <div className="text-sm text-muted-foreground">暂无符合条件的流水。</div>
             ) : (
-              <Table>
+              <Table className="min-w-[860px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>日期</TableHead>
+                    <TableHead>日期时间</TableHead>
                     <TableHead>类型</TableHead>
                     <TableHead>账户/分类</TableHead>
                     <TableHead>备注</TableHead>
@@ -636,7 +640,7 @@ export default function TransactionsPage() {
                     const sign = transaction.type === "expense" ? "-" : "+"
                     return (
                       <TableRow key={transaction._id}>
-                        <TableCell>{toDateLabel(transaction.occurredAt)}</TableCell>
+                        <TableCell>{toDateTimeLabel(transaction.occurredAt)}</TableCell>
                         <TableCell>{getTypeLabel(transaction.type)}</TableCell>
                         <TableCell className="max-w-[260px] truncate">{detail}</TableCell>
                         <TableCell className="max-w-[240px] truncate">
@@ -647,8 +651,13 @@ export default function TransactionsPage() {
                           {toCurrency(transaction.amount)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="inline-flex gap-2">
-                            <Button type="button" variant="outline" size="sm" onClick={() => startEdit(transaction)}>
+                          <div className="inline-flex flex-wrap justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => startEdit(transaction)}
+                            >
                               编辑
                             </Button>
                             <Button
