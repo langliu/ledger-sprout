@@ -277,6 +277,7 @@ export const update = mutation({
     occurredAt: v.optional(v.number()),
     categoryId: v.optional(v.id("categories")),
     note: v.optional(v.string()),
+    clearNote: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const transaction = await ctx.db.get(args.transactionId);
@@ -308,6 +309,12 @@ export const update = mutation({
     if (args.occurredAt !== undefined) {
       assertTimestamp(args.occurredAt, "occurredAt");
       patch.occurredAt = args.occurredAt;
+    }
+    if (args.clearNote) {
+      if (args.note !== undefined) {
+        throw new ConvexError("note and clearNote cannot be used together");
+      }
+      patch.note = "";
     }
     if (args.note !== undefined) {
       const note = args.note.trim();
@@ -346,6 +353,9 @@ export const update = mutation({
         ensureCategoryInLedger(category, transaction.ledgerId);
         if (category.type !== transaction.type) {
           throw new ConvexError("Category type mismatch");
+        }
+        if (category.status !== "active") {
+          throw new ConvexError("Category is inactive");
         }
         patch.categoryId = args.categoryId;
       }

@@ -59,6 +59,22 @@ function toDateLabel(timestamp: number) {
   })
 }
 
+function toDayStartTimestamp(dateText: string) {
+  if (!dateText) {
+    return undefined
+  }
+  const ts = new Date(`${dateText}T00:00:00`).getTime()
+  return Number.isNaN(ts) ? undefined : ts
+}
+
+function toDayEndTimestamp(dateText: string) {
+  if (!dateText) {
+    return undefined
+  }
+  const ts = new Date(`${dateText}T23:59:59`).getTime()
+  return Number.isNaN(ts) ? undefined : ts
+}
+
 function toDateInputValue(timestamp: number) {
   const date = new Date(timestamp)
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
@@ -82,6 +98,10 @@ export default function TransactionsPage() {
 
   const [type, setType] = useState<TransactionFilter>("all")
   const [search, setSearch] = useState("")
+  const [filterAccountId, setFilterAccountId] = useState<Id<"accounts"> | "">("")
+  const [filterCategoryId, setFilterCategoryId] = useState<Id<"categories"> | "">("")
+  const [filterFromDate, setFilterFromDate] = useState("")
+  const [filterToDate, setFilterToDate] = useState("")
   const [isDeletingId, setIsDeletingId] = useState<Id<"transactions"> | null>(null)
   const [editingId, setEditingId] = useState<Id<"transactions"> | null>(null)
   const [editingType, setEditingType] = useState<"expense" | "income" | "transfer" | null>(null)
@@ -89,6 +109,7 @@ export default function TransactionsPage() {
   const [editingOccurredDate, setEditingOccurredDate] = useState("")
   const [editingCategoryId, setEditingCategoryId] = useState<Id<"categories"> | "">("")
   const [editingNote, setEditingNote] = useState("")
+  const [editingOriginalNote, setEditingOriginalNote] = useState("")
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -106,6 +127,10 @@ export default function TransactionsPage() {
       ? {
           ledgerId: currentLedger._id,
           type: type === "all" ? undefined : type,
+          accountId: filterAccountId || undefined,
+          categoryId: filterCategoryId || undefined,
+          from: toDayStartTimestamp(filterFromDate),
+          to: toDayEndTimestamp(filterToDate),
           search: search.trim() ? search.trim() : undefined,
           limit: 200,
         }
@@ -131,7 +156,9 @@ export default function TransactionsPage() {
     setEditingAmount((transaction.amount / 100).toFixed(2))
     setEditingOccurredDate(toDateInputValue(transaction.occurredAt))
     setEditingCategoryId(transaction.categoryId ?? "")
-    setEditingNote(transaction.note ?? "")
+    const note = transaction.note ?? ""
+    setEditingNote(note)
+    setEditingOriginalNote(note)
     setErrorMessage(null)
   }
 
@@ -149,6 +176,7 @@ export default function TransactionsPage() {
       if (editingId === transactionId) {
         setEditingId(null)
         setEditingType(null)
+        setEditingOriginalNote("")
       }
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
@@ -186,6 +214,8 @@ export default function TransactionsPage() {
     setErrorMessage(null)
     setIsSavingEdit(true)
     try {
+      const trimmedNote = editingNote.trim()
+      const originalTrimmedNote = editingOriginalNote.trim()
       await updateTransaction({
         transactionId: editingId,
         amount,
@@ -193,10 +223,15 @@ export default function TransactionsPage() {
         ...(editingType !== "transfer"
           ? { categoryId: editingCategoryId as Id<"categories"> }
           : {}),
-        ...(editingNote.trim().length > 0 ? { note: editingNote.trim() } : {}),
+        ...(trimmedNote.length > 0
+          ? { note: trimmedNote }
+          : originalTrimmedNote.length > 0
+            ? { clearNote: true }
+            : {}),
       })
       setEditingId(null)
       setEditingType(null)
+      setEditingOriginalNote("")
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
         setErrorMessage(String(error.message))
@@ -266,10 +301,10 @@ export default function TransactionsPage() {
         <Card>
           <CardHeader>
             <CardTitle>流水筛选</CardTitle>
-            <CardDescription>支持按类型和备注关键词过滤。</CardDescription>
+            <CardDescription>支持按类型、账户、分类、日期区间和备注关键词过滤。</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">类型</p>
                 <Select value={type} onValueChange={(value) => setType(value as TransactionFilter)}>
@@ -284,7 +319,73 @@ export default function TransactionsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2 md:col-span-2">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">账户</p>
+                <Select
+                  value={filterAccountId || "all"}
+                  onValueChange={(value) =>
+                    setFilterAccountId(value === "all" ? "" : (value as Id<"accounts">))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部账户</SelectItem>
+                    {(accounts ?? []).map((account) => (
+                      <SelectItem key={account._id} value={account._id}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">分类</p>
+                <Select
+                  value={filterCategoryId || "all"}
+                  onValueChange={(value) =>
+                    setFilterCategoryId(value === "all" ? "" : (value as Id<"categories">))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部分类</SelectItem>
+                    {(categories ?? [])
+                      .filter((category) =>
+                        type === "all" || type === "transfer" ? true : category.type === type,
+                      )
+                      .map((category) => (
+                        <SelectItem key={category._id} value={category._id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">开始日期</p>
+                <Input
+                  type="date"
+                  value={filterFromDate}
+                  onChange={(event) => {
+                    setFilterFromDate(event.target.value)
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">结束日期</p>
+                <Input
+                  type="date"
+                  value={filterToDate}
+                  onChange={(event) => {
+                    setFilterToDate(event.target.value)
+                  }}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-5">
                 <p className="text-sm text-muted-foreground">关键词（备注）</p>
                 <Input
                   placeholder="例如：午饭、地铁、工资"
@@ -294,6 +395,23 @@ export default function TransactionsPage() {
                   }}
                 />
               </div>
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setType("all")
+                  setFilterAccountId("")
+                  setFilterCategoryId("")
+                  setFilterFromDate("")
+                  setFilterToDate("")
+                  setSearch("")
+                }}
+              >
+                重置筛选
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -360,7 +478,7 @@ export default function TransactionsPage() {
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">备注</p>
                   <Input
-                    placeholder="留空表示不更新备注"
+                    placeholder="删除全部内容后保存可清空备注"
                     value={editingNote}
                     onChange={(event) => {
                       setEditingNote(event.target.value)
@@ -377,6 +495,7 @@ export default function TransactionsPage() {
                     onClick={() => {
                       setEditingId(null)
                       setEditingType(null)
+                      setEditingOriginalNote("")
                     }}
                   >
                     取消
@@ -433,7 +552,7 @@ export default function TransactionsPage() {
                         <TableCell>{getTypeLabel(transaction.type)}</TableCell>
                         <TableCell className="max-w-[260px] truncate">{detail}</TableCell>
                         <TableCell className="max-w-[240px] truncate">
-                          {transaction.note ?? "-"}
+                          {transaction.note && transaction.note.trim().length > 0 ? transaction.note : "-"}
                         </TableCell>
                         <TableCell className="text-right font-medium">
                           {sign}
