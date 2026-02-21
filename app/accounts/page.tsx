@@ -58,6 +58,21 @@ function toCurrency(minorUnits: number) {
   }).format(minorUnits / 100)
 }
 
+function toSignedCurrency(minorUnits: number) {
+  const absolute = toCurrency(Math.abs(minorUnits))
+  return minorUnits >= 0 ? `+${absolute}` : `-${absolute}`
+}
+
+function toDateTimeLabel(timestamp: number) {
+  return new Date(timestamp).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 function getTypeLabel(type: AccountType) {
   return ACCOUNT_TYPE_OPTIONS.find((item) => item.value === type)?.label ?? type
 }
@@ -71,6 +86,10 @@ export default function AccountsPage() {
   const accounts = useQuery(
     api.accounts.list,
     currentLedger ? { ledgerId: currentLedger._id } : "skip",
+  )
+  const adjustments = useQuery(
+    api.accounts.listAdjustments,
+    currentLedger ? { ledgerId: currentLedger._id, limit: 20 } : "skip",
   )
 
   const [name, setName] = useState("")
@@ -96,6 +115,9 @@ export default function AccountsPage() {
   }, [accounts])
   const totalBalance = useMemo(() => {
     return (accounts ?? []).reduce((sum, account) => sum + account.currentBalance, 0)
+  }, [accounts])
+  const accountMap = useMemo(() => {
+    return new Map((accounts ?? []).map((account) => [account._id, account]))
   }, [accounts])
 
   useEffect(() => {
@@ -533,6 +555,43 @@ export default function AccountsPage() {
                           </Button>
                         </div>
                       </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="px-4 lg:px-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>最近余额调整记录</CardTitle>
+            <CardDescription>记录手动调整账户余额的历史操作。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!adjustments || adjustments.length === 0 ? (
+              <div className="text-sm text-muted-foreground">暂无余额调整记录。</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>时间</TableHead>
+                    <TableHead>账户</TableHead>
+                    <TableHead className="text-right">调整金额</TableHead>
+                    <TableHead>原因</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {adjustments.map((item) => (
+                    <TableRow key={item._id}>
+                      <TableCell>{toDateTimeLabel(item.createdAt)}</TableCell>
+                      <TableCell>{accountMap.get(item.accountId)?.name ?? "未知账户"}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {toSignedCurrency(item.delta)}
+                      </TableCell>
+                      <TableCell>{item.reason ?? "-"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

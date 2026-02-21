@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireLedgerOwner } from "./lib/auth";
+import { getAuthOwnerKey, requireLedgerOwner } from "./lib/auth";
 import {
   assertIntegerAmount,
   normalizeRequiredName,
@@ -17,6 +17,45 @@ const accountStatusValidator = v.union(
   v.literal("active"),
   v.literal("inactive"),
 );
+
+export const listAdjustments = query({
+  args: {
+    ledgerId: v.id("ledgers"),
+    accountId: v.optional(v.id("accounts")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireLedgerOwner(ctx, args.ledgerId);
+    const limit = args.limit ?? 20;
+    if (!Number.isInteger(limit) || limit <= 0 || limit > 200) {
+      throw new ConvexError("limit must be an integer between 1 and 200");
+    }
+
+    if (args.accountId) {
+      const account = await ctx.db.get(args.accountId);
+      if (!account) {
+        throw new ConvexError("Account not found");
+      }
+      if (account.ledgerId !== args.ledgerId) {
+        throw new ConvexError("Account does not belong to ledger");
+      }
+
+      const docs = await ctx.db
+        .query("balanceAdjustments")
+        .withIndex("by_account_createdAt", (q) => q.eq("accountId", args.accountId!))
+        .order("desc")
+        .collect();
+      return docs.slice(0, limit);
+    }
+
+    const docs = await ctx.db
+      .query("balanceAdjustments")
+      .withIndex("by_ledger_createdAt", (q) => q.eq("ledgerId", args.ledgerId))
+      .order("desc")
+      .collect();
+    return docs.slice(0, limit);
+  },
+});
 
 export const list = query({
   args: {
@@ -122,19 +161,28 @@ export const adjustBalance = mutation({
       throw new ConvexError("Account not found");
     }
 
-    await requireLedgerOwner(ctx, account.ledgerId);
+    const { user } = await requireLedgerOwner(ctx, account.ledgerId);
     assertIntegerAmount(args.delta, "delta");
 
+    const reason = args.reason?.trim();
     if (args.reason !== undefined) {
-      const reason = args.reason.trim();
-      if (reason.length === 0) {
+      if (!reason || reason.length === 0) {
         throw new ConvexError("reason cannot be empty");
       }
     }
 
+    const updatedAt = Date.now();
     await ctx.db.patch(args.accountId, {
       currentBalance: account.currentBalance + args.delta,
-      updatedAt: Date.now(),
+      updatedAt,
+    });
+    await ctx.db.insert("balanceAdjustments", {
+      ledgerId: account.ledgerId,
+      accountId: args.accountId,
+      delta: args.delta,
+      ...(reason ? { reason } : {}),
+      actorUserId: getAuthOwnerKey(user),
+      createdAt: updatedAt,
     });
 
     return await ctx.db.get(args.accountId);

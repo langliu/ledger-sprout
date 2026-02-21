@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 
 import type { Doc, Id } from "@/convex/_generated/dataModel"
@@ -105,6 +105,8 @@ export default function TransactionsPage() {
   const [isDeletingId, setIsDeletingId] = useState<Id<"transactions"> | null>(null)
   const [editingId, setEditingId] = useState<Id<"transactions"> | null>(null)
   const [editingType, setEditingType] = useState<"expense" | "income" | "transfer" | null>(null)
+  const [editingAccountId, setEditingAccountId] = useState<Id<"accounts"> | "">("")
+  const [editingTransferAccountId, setEditingTransferAccountId] = useState<Id<"accounts"> | "">("")
   const [editingAmount, setEditingAmount] = useState("")
   const [editingOccurredDate, setEditingOccurredDate] = useState("")
   const [editingCategoryId, setEditingCategoryId] = useState<Id<"categories"> | "">("")
@@ -149,10 +151,33 @@ export default function TransactionsPage() {
     }
     return categories.filter((category) => category.type === editingType)
   }, [categories, editingType])
+  const editableTransferAccounts = useMemo(() => {
+    if (!accounts || editingType !== "transfer") {
+      return []
+    }
+    return accounts.filter((account) => account._id !== editingAccountId)
+  }, [accounts, editingAccountId, editingType])
+
+  useEffect(() => {
+    if (editingType !== "transfer") {
+      return
+    }
+    if (!editableTransferAccounts.length) {
+      return
+    }
+    if (
+      !editingTransferAccountId ||
+      !editableTransferAccounts.some((account) => account._id === editingTransferAccountId)
+    ) {
+      setEditingTransferAccountId(editableTransferAccounts[0]._id)
+    }
+  }, [editableTransferAccounts, editingTransferAccountId, editingType])
 
   const startEdit = (transaction: Doc<"transactions">) => {
     setEditingId(transaction._id)
     setEditingType(transaction.type)
+    setEditingAccountId(transaction.accountId)
+    setEditingTransferAccountId(transaction.transferAccountId ?? "")
     setEditingAmount((transaction.amount / 100).toFixed(2))
     setEditingOccurredDate(toDateInputValue(transaction.occurredAt))
     setEditingCategoryId(transaction.categoryId ?? "")
@@ -176,6 +201,8 @@ export default function TransactionsPage() {
       if (editingId === transactionId) {
         setEditingId(null)
         setEditingType(null)
+        setEditingAccountId("")
+        setEditingTransferAccountId("")
         setEditingOriginalNote("")
       }
     } catch (error: unknown) {
@@ -191,6 +218,10 @@ export default function TransactionsPage() {
 
   const handleSaveEdit = async () => {
     if (!editingId || !editingType) {
+      return
+    }
+    if (!editingAccountId) {
+      setErrorMessage("请选择账户。")
       return
     }
 
@@ -210,6 +241,16 @@ export default function TransactionsPage() {
       setErrorMessage("请选择分类。")
       return
     }
+    if (editingType === "transfer") {
+      if (!editingTransferAccountId) {
+        setErrorMessage("请选择转入账户。")
+        return
+      }
+      if (editingTransferAccountId === editingAccountId) {
+        setErrorMessage("转出账户和转入账户不能相同。")
+        return
+      }
+    }
 
     setErrorMessage(null)
     setIsSavingEdit(true)
@@ -218,6 +259,10 @@ export default function TransactionsPage() {
       const originalTrimmedNote = editingOriginalNote.trim()
       await updateTransaction({
         transactionId: editingId,
+        accountId: editingAccountId,
+        ...(editingType === "transfer"
+          ? { transferAccountId: editingTransferAccountId as Id<"accounts"> }
+          : {}),
         amount,
         occurredAt,
         ...(editingType !== "transfer"
@@ -231,6 +276,8 @@ export default function TransactionsPage() {
       })
       setEditingId(null)
       setEditingType(null)
+      setEditingAccountId("")
+      setEditingTransferAccountId("")
       setEditingOriginalNote("")
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
@@ -434,6 +481,24 @@ export default function TransactionsPage() {
                     <Input value={getTypeLabel(editingType ?? "expense")} disabled />
                   </div>
                   <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">账户</p>
+                    <Select
+                      value={editingAccountId || undefined}
+                      onValueChange={(value) => setEditingAccountId(value as Id<"accounts">)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="请选择账户" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(accounts ?? []).map((account) => (
+                          <SelectItem key={account._id} value={account._id}>
+                            {account.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">金额（元）</p>
                     <Input
                       value={editingAmount}
@@ -442,7 +507,7 @@ export default function TransactionsPage() {
                       }}
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-3">
                     <p className="text-sm text-muted-foreground">日期</p>
                     <Input
                       type="date"
@@ -453,6 +518,27 @@ export default function TransactionsPage() {
                     />
                   </div>
                 </div>
+
+                {editingType === "transfer" ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">转入账户</p>
+                    <Select
+                      value={editingTransferAccountId || undefined}
+                      onValueChange={(value) => setEditingTransferAccountId(value as Id<"accounts">)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="请选择转入账户" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {editableTransferAccounts.map((account) => (
+                          <SelectItem key={account._id} value={account._id}>
+                            {account.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
 
                 {editingType !== "transfer" ? (
                   <div className="space-y-2">
@@ -495,6 +581,8 @@ export default function TransactionsPage() {
                     onClick={() => {
                       setEditingId(null)
                       setEditingType(null)
+                      setEditingAccountId("")
+                      setEditingTransferAccountId("")
                       setEditingOriginalNote("")
                     }}
                   >

@@ -273,6 +273,8 @@ export const createTransfer = mutation({
 export const update = mutation({
   args: {
     transactionId: v.id("transactions"),
+    accountId: v.optional(v.id("accounts")),
+    transferAccountId: v.optional(v.id("accounts")),
     amount: v.optional(v.number()),
     occurredAt: v.optional(v.number()),
     categoryId: v.optional(v.id("categories")),
@@ -294,6 +296,8 @@ export const update = mutation({
     }
 
     const patch: {
+      accountId?: Id<"accounts">;
+      transferAccountId?: Id<"accounts">;
       amount?: number;
       occurredAt?: number;
       categoryId?: Id<"categories">;
@@ -305,6 +309,12 @@ export const update = mutation({
 
     if (args.amount !== undefined) {
       patch.amount = args.amount;
+    }
+    if (args.accountId !== undefined) {
+      patch.accountId = args.accountId;
+    }
+    if (args.transferAccountId !== undefined) {
+      patch.transferAccountId = args.transferAccountId;
     }
     if (args.occurredAt !== undefined) {
       assertTimestamp(args.occurredAt, "occurredAt");
@@ -329,25 +339,89 @@ export const update = mutation({
         throw new ConvexError("Transfer transaction cannot set categoryId");
       }
 
-      if (args.amount !== undefined) {
-        const fromAccount = await getAccountOrThrow(ctx, transaction.accountId);
-        const toAccountId = transaction.transferAccountId;
-        if (!toAccountId) {
-          throw new ConvexError("Transfer transaction is missing transferAccountId");
-        }
-        const toAccount = await getAccountOrThrow(ctx, toAccountId);
-        const delta = nextAmount - transaction.amount;
+      const oldFromAccountId = transaction.accountId;
+      const oldToAccountId = transaction.transferAccountId;
+      if (!oldToAccountId) {
+        throw new ConvexError("Transfer transaction is missing transferAccountId");
+      }
 
-        await ctx.db.patch(transaction.accountId, {
-          currentBalance: fromAccount.currentBalance - delta,
-          updatedAt: patch.updatedAt,
-        });
-        await ctx.db.patch(toAccountId, {
-          currentBalance: toAccount.currentBalance + delta,
-          updatedAt: patch.updatedAt,
-        });
+      const nextFromAccountId = args.accountId ?? oldFromAccountId;
+      const nextToAccountId = args.transferAccountId ?? oldToAccountId;
+
+      if (nextFromAccountId === nextToAccountId) {
+        throw new ConvexError("fromAccountId and toAccountId must be different");
+      }
+
+      if (args.accountId !== undefined && args.accountId !== oldFromAccountId) {
+        const nextFromAccount = await getAccountOrThrow(ctx, nextFromAccountId);
+        ensureAccountInLedger(nextFromAccount, transaction.ledgerId);
+        if (nextFromAccount.status !== "active") {
+          throw new ConvexError("Account is inactive");
+        }
+      }
+      if (args.transferAccountId !== undefined && args.transferAccountId !== oldToAccountId) {
+        const nextToAccount = await getAccountOrThrow(ctx, nextToAccountId);
+        ensureAccountInLedger(nextToAccount, transaction.ledgerId);
+        if (nextToAccount.status !== "active") {
+          throw new ConvexError("Transfer account is inactive");
+        }
+      }
+
+      if (
+        args.amount !== undefined ||
+        args.accountId !== undefined ||
+        args.transferAccountId !== undefined
+      ) {
+        const affectedAccountIds = new Set<Id<"accounts">>([
+          oldFromAccountId,
+          oldToAccountId,
+          nextFromAccountId,
+          nextToAccountId,
+        ]);
+        const accounts = new Map<Id<"accounts">, Doc<"accounts">>();
+        for (const accountId of affectedAccountIds) {
+          const account = await getAccountOrThrow(ctx, accountId);
+          accounts.set(accountId, account);
+        }
+
+        const deltas = new Map<Id<"accounts">, number>();
+        const addDelta = (accountId: Id<"accounts">, delta: number) => {
+          deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta);
+        };
+
+        addDelta(oldFromAccountId, transaction.amount);
+        addDelta(oldToAccountId, -transaction.amount);
+        addDelta(nextFromAccountId, -nextAmount);
+        addDelta(nextToAccountId, nextAmount);
+
+        for (const [accountId, delta] of deltas) {
+          if (delta === 0) {
+            continue;
+          }
+          const account = accounts.get(accountId);
+          if (!account) {
+            throw new ConvexError("Account not found");
+          }
+          await ctx.db.patch(accountId, {
+            currentBalance: account.currentBalance + delta,
+            updatedAt: patch.updatedAt,
+          });
+        }
       }
     } else {
+      if (args.transferAccountId !== undefined) {
+        throw new ConvexError("Non-transfer transaction cannot set transferAccountId");
+      }
+
+      const nextAccountId = args.accountId ?? transaction.accountId;
+      if (args.accountId !== undefined && args.accountId !== transaction.accountId) {
+        const nextAccount = await getAccountOrThrow(ctx, nextAccountId);
+        ensureAccountInLedger(nextAccount, transaction.ledgerId);
+        if (nextAccount.status !== "active") {
+          throw new ConvexError("Account is inactive");
+        }
+      }
+
       if (args.categoryId !== undefined) {
         const category = await getCategoryOrThrow(ctx, args.categoryId);
         ensureCategoryInLedger(category, transaction.ledgerId);
@@ -360,14 +434,39 @@ export const update = mutation({
         patch.categoryId = args.categoryId;
       }
 
-      if (args.amount !== undefined) {
-        const account = await getAccountOrThrow(ctx, transaction.accountId);
-        const delta = nextAmount - transaction.amount;
-        const balanceDelta = transaction.type === "expense" ? -delta : delta;
-        await ctx.db.patch(transaction.accountId, {
-          currentBalance: account.currentBalance + balanceDelta,
-          updatedAt: patch.updatedAt,
-        });
+      if (args.amount !== undefined || args.accountId !== undefined) {
+        const oldAccount = await getAccountOrThrow(ctx, transaction.accountId);
+        const targetAccount =
+          nextAccountId === transaction.accountId
+            ? oldAccount
+            : await getAccountOrThrow(ctx, nextAccountId);
+        ensureAccountInLedger(oldAccount, transaction.ledgerId);
+        ensureAccountInLedger(targetAccount, transaction.ledgerId);
+
+        const sign = transaction.type === "expense" ? -1 : 1;
+        const deltas = new Map<Id<"accounts">, number>();
+        const addDelta = (accountId: Id<"accounts">, delta: number) => {
+          deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta);
+        };
+
+        addDelta(transaction.accountId, -sign * transaction.amount);
+        addDelta(nextAccountId, sign * nextAmount);
+
+        for (const [accountId, delta] of deltas) {
+          if (delta === 0) {
+            continue;
+          }
+          const account =
+            accountId === oldAccount._id
+              ? oldAccount
+              : accountId === targetAccount._id
+                ? targetAccount
+                : await getAccountOrThrow(ctx, accountId);
+          await ctx.db.patch(accountId, {
+            currentBalance: account.currentBalance + delta,
+            updatedAt: patch.updatedAt,
+          });
+        }
       }
     }
 

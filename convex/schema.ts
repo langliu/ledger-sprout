@@ -30,6 +30,16 @@ const schema = defineSchema({
   })
     .index("by_ledger", ["ledgerId"])
     .index("by_ledger_status", ["ledgerId", "status"]),
+  balanceAdjustments: defineTable({
+    ledgerId: v.id("ledgers"),
+    accountId: v.id("accounts"),
+    delta: v.number(),
+    reason: v.optional(v.string()),
+    actorUserId: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_ledger_createdAt", ["ledgerId", "createdAt"])
+    .index("by_account_createdAt", ["accountId", "createdAt"]),
   categories: defineTable({
     ledgerId: v.id("ledgers"),
     name: v.string(),
