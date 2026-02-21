@@ -70,6 +70,14 @@ export default function CategoriesPage() {
       return passType && passStatus
     })
   }, [categories, filterStatus, filterType])
+  const totalCategories = categories?.length ?? 0
+  const activeCategories = useMemo(() => {
+    return (categories ?? []).filter((category) => category.status === "active").length
+  }, [categories])
+  const inactiveCategories = totalCategories - activeCategories
+  const activeFilterCount = useMemo(() => {
+    return [filterType !== "all", filterStatus !== "all"].filter(Boolean).length
+  }, [filterStatus, filterType])
 
   const startEdit = (category: Doc<"categories">) => {
     setEditingId(category._id)
@@ -208,105 +216,140 @@ export default function CategoriesPage() {
         </Button>
       }
     >
-      <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>新增分类</CardTitle>
-            <CardDescription>创建后可用于新增收入或支出流水。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleCreate}>
-              <div className="space-y-2">
-                <Label htmlFor="categoryName">分类名称</Label>
-                <Input
-                  id="categoryName"
-                  placeholder="例如：外卖"
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value)
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="categoryType">分类类型</Label>
-                <Select value={type} onValueChange={(value) => setType(value as CategoryType)}>
-                  <SelectTrigger id="categoryType">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="expense">支出</SelectItem>
-                    <SelectItem value="income">收入</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
-              <Button type="submit" disabled={isCreating}>
-                {isCreating ? "创建中..." : "创建分类"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+      <div className="space-y-4 px-4 lg:space-y-6 lg:px-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardDescription>分类总数</CardDescription>
+              <CardTitle>{totalCategories}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>启用分类</CardDescription>
+              <CardTitle>{activeCategories}</CardTitle>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription>停用分类</CardDescription>
+              <CardTitle>{inactiveCategories}</CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>编辑分类</CardTitle>
-            <CardDescription>可修改名称和启停状态。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {editingId ? (
-              <>
+        {errorMessage ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle>新增分类</CardTitle>
+              <CardDescription>创建后可用于新增收入或支出流水。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleCreate}>
                 <div className="space-y-2">
-                  <Label htmlFor="editingCategoryName">名称</Label>
+                  <Label htmlFor="categoryName">分类名称</Label>
                   <Input
-                    id="editingCategoryName"
-                    value={editingName}
+                    id="categoryName"
+                    placeholder="例如：外卖"
+                    value={name}
                     onChange={(event) => {
-                      setEditingName(event.target.value)
+                      setName(event.target.value)
                     }}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="editingCategoryStatus">状态</Label>
-                  <Select
-                    value={editingStatus}
-                    onValueChange={(value) => setEditingStatus(value as CategoryStatus)}
-                  >
-                    <SelectTrigger id="editingCategoryStatus">
+                  <Label htmlFor="categoryType">分类类型</Label>
+                  <Select value={type} onValueChange={(value) => setType(value as CategoryType)}>
+                    <SelectTrigger id="categoryType">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="active">启用</SelectItem>
-                      <SelectItem value="inactive">停用</SelectItem>
+                      <SelectItem value="expense">支出</SelectItem>
+                      <SelectItem value="income">收入</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button type="button" onClick={() => void handleSaveEdit()} disabled={isSavingEdit}>
-                    {isSavingEdit ? "保存中..." : "保存修改"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setEditingId(null)
-                    }}
-                  >
-                    取消
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">请选择下方分类进入编辑模式。</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                <Button type="submit" disabled={isCreating}>
+                  {isCreating ? "创建中..." : "创建分类"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
 
-      <div className="px-4 lg:px-6">
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle>编辑分类</CardTitle>
+              <CardDescription>可修改名称和启停状态。</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {editingId ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="editingCategoryName">名称</Label>
+                    <Input
+                      id="editingCategoryName"
+                      value={editingName}
+                      onChange={(event) => {
+                        setEditingName(event.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editingCategoryStatus">状态</Label>
+                    <Select
+                      value={editingStatus}
+                      onValueChange={(value) => setEditingStatus(value as CategoryStatus)}
+                    >
+                      <SelectTrigger id="editingCategoryStatus">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">启用</SelectItem>
+                        <SelectItem value="inactive">停用</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => void handleSaveEdit()}
+                      disabled={isSavingEdit}
+                    >
+                      {isSavingEdit ? "保存中..." : "保存修改"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingId(null)
+                      }}
+                    >
+                      取消
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                  请选择下方分类进入编辑模式。
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle>分类列表</CardTitle>
-            <CardDescription>可按类型与状态过滤。</CardDescription>
+            <CardDescription>
+              可按类型与状态过滤。
+              {activeFilterCount > 0 ? ` · ${activeFilterCount} 个筛选条件生效` : ""}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -340,11 +383,27 @@ export default function CategoriesPage() {
                 </Select>
               </div>
             </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {activeFilterCount > 0 ? `已启用 ${activeFilterCount} 个筛选条件` : "当前未启用筛选条件"}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFilterType("all")
+                  setFilterStatus("all")
+                }}
+              >
+                重置筛选
+              </Button>
+            </div>
 
             {filteredCategories.length === 0 ? (
               <div className="text-sm text-muted-foreground">暂无符合条件的分类。</div>
             ) : (
-              <Table>
+              <Table className="min-w-[700px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>名称</TableHead>
@@ -360,8 +419,13 @@ export default function CategoriesPage() {
                       <TableCell>{getTypeLabel(category.type)}</TableCell>
                       <TableCell>{category.status === "active" ? "启用" : "停用"}</TableCell>
                       <TableCell className="text-right">
-                        <div className="inline-flex gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => startEdit(category)}>
+                        <div className="inline-flex flex-wrap justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startEdit(category)}
+                          >
                             编辑
                           </Button>
                           <Button

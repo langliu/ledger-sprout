@@ -30,11 +30,6 @@ import {
 import { authClient } from "@/lib/auth-client"
 
 const data = {
-  user: {
-    name: "账芽用户",
-    email: "hello@ledger-sprout.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     {
       title: "数据总览",
@@ -88,10 +83,14 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = authClient.useSession()
+  const avatar =
+    typeof session?.user?.image === "string" && session.user.image.trim().length > 0
+      ? session.user.image.trim()
+      : undefined
   const user = {
     name: session?.user?.name ?? "未登录用户",
     email: session?.user?.email ?? "请先登录",
-    avatar: session?.user?.image ?? "",
+    avatar,
   }
 
   return (

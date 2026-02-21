@@ -44,6 +44,11 @@ export function NavUser({
   const { isMobile } = useSidebar()
   const router = useRouter()
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const avatarSrc =
+    typeof user.avatar === "string" && user.avatar.trim().length > 0
+      ? user.avatar.trim()
+      : undefined
+  const avatarKey = avatarSrc ?? user.email ?? user.name
   const avatarFallback = (user.name || "U")
     .trim()
     .split(/\s+/)
@@ -76,9 +81,14 @@ export function NavUser({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg grayscale">
-                <AvatarImage src={user.avatar ?? undefined} alt={user.name} />
-                <AvatarFallback className="rounded-lg">{avatarFallback}</AvatarFallback>
+              <Avatar key={`trigger-${avatarKey}`} className="h-8 w-8 rounded-full">
+                <AvatarImage
+                  key={`trigger-image-${avatarKey}`}
+                  src={avatarSrc}
+                  alt={user.name}
+                  referrerPolicy="no-referrer"
+                />
+                <AvatarFallback className="rounded-full">{avatarFallback}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -97,9 +107,14 @@ export function NavUser({
           >
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar ?? undefined} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">{avatarFallback}</AvatarFallback>
+                <Avatar key={`dropdown-${avatarKey}`} className="h-8 w-8 rounded-full">
+                  <AvatarImage
+                    key={`dropdown-image-${avatarKey}`}
+                    src={avatarSrc}
+                    alt={user.name}
+                    referrerPolicy="no-referrer"
+                  />
+                  <AvatarFallback className="rounded-full">{avatarFallback}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
