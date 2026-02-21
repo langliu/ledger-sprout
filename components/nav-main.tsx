@@ -25,10 +25,17 @@ export function NavMain({
   const pathname = usePathname()
 
   const isActive = (url: string) => {
-    if (url === "/") {
-      return pathname === url
+    if (pathname === url) {
+      return true
     }
-    return pathname === url || pathname.startsWith(`${url}/`)
+    if (!pathname.startsWith(`${url}/`)) {
+      return false
+    }
+
+    const hasMoreSpecificMatch = items.some((item) => {
+      return item.url !== url && pathname === item.url
+    })
+    return !hasMoreSpecificMatch
   }
 
   return (

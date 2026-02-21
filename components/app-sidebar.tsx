@@ -3,13 +3,16 @@
 import * as React from "react"
 import Link from "next/link"
 import {
+  IconChartBar,
   IconDashboard,
   IconHelp,
   IconInnerShadowTop,
   IconListDetails,
-  IconPlus,
+  IconReceipt2,
   IconSearch,
   IconSettings,
+  IconTags,
+  IconWallet,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -44,9 +47,24 @@ const data = {
       icon: IconListDetails,
     },
     {
+      title: "账户管理",
+      url: "/accounts",
+      icon: IconWallet,
+    },
+    {
+      title: "分类管理",
+      url: "/categories",
+      icon: IconTags,
+    },
+    {
+      title: "报表分析",
+      url: "/reports",
+      icon: IconChartBar,
+    },
+    {
       title: "新增记账",
       url: "/transactions/new",
-      icon: IconPlus,
+      icon: IconReceipt2,
     },
   ],
   navSecondary: [
