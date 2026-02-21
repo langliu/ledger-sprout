@@ -1,40 +1,365 @@
-import { AppSidebar } from "@/components/app-sidebar"
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { DataTable } from "@/components/data-table"
-import { SectionCards } from "@/components/section-cards"
-import { SiteHeader } from "@/components/site-header"
-import {
-  SidebarInset,
-  SidebarProvider,
-} from "@/components/ui/sidebar"
+"use client"
 
-import data from "./data.json"
+import Link from "next/link"
+import { useMemo } from "react"
+import { useQuery } from "convex/react"
+import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
+import { IconArrowDownRight, IconArrowUpRight, IconWallet } from "@tabler/icons-react"
+
+import { LedgerShell } from "@/components/ledger-shell"
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { api } from "@/convex/_generated/api"
+import { useCurrentLedger } from "@/hooks/use-current-ledger"
+
+const chartConfig = {
+  income: {
+    label: "收入",
+    color: "var(--chart-1)",
+  },
+  expense: {
+    label: "支出",
+    color: "var(--chart-2)",
+  },
+} satisfies ChartConfig
+
+function toCurrency(minorUnits: number) {
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+  }).format(minorUnits / 100)
+}
+
+function toDateLabel(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString("zh-CN", {
+    month: "short",
+    day: "numeric",
+  })
+}
+
+function toTrendLabel(bucket: string) {
+  return bucket.slice(5).replace("-", "/")
+}
+
+function getTypeLabel(type: "expense" | "income" | "transfer") {
+  if (type === "expense") {
+    return "支出"
+  }
+  if (type === "income") {
+    return "收入"
+  }
+  return "转账"
+}
 
 export default function Page() {
+  const { session, isSessionPending, currentLedger, ledgerError } = useCurrentLedger()
+
+  const { year, month, trendStart, trendEnd } = useMemo(() => {
+    const now = new Date()
+    const end = now.getTime()
+    return {
+      year: now.getUTCFullYear(),
+      month: now.getUTCMonth() + 1,
+      trendStart: end - 1000 * 60 * 60 * 24 * 30,
+      trendEnd: end,
+    }
+  }, [])
+
+  const summary = useQuery(
+    api.reports.monthlySummary,
+    currentLedger ? { ledgerId: currentLedger._id, year, month } : "skip",
+  )
+  const trend = useQuery(
+    api.reports.trend,
+    currentLedger
+      ? {
+          ledgerId: currentLedger._id,
+          from: trendStart,
+          to: trendEnd,
+          granularity: "day",
+        }
+      : "skip",
+  )
+  const transactions = useQuery(
+    api.transactions.list,
+    currentLedger ? { ledgerId: currentLedger._id, limit: 8 } : "skip",
+  )
+  const accounts = useQuery(
+    api.accounts.list,
+    currentLedger ? { ledgerId: currentLedger._id } : "skip",
+  )
+  const categories = useQuery(
+    api.categories.list,
+    currentLedger ? { ledgerId: currentLedger._id } : "skip",
+  )
+
+  const accountMap = useMemo(() => {
+    return new Map((accounts ?? []).map((account) => [account._id, account]))
+  }, [accounts])
+  const categoryMap = useMemo(() => {
+    return new Map((categories ?? []).map((category) => [category._id, category]))
+  }, [categories])
+  const activeAccountCount = (accounts ?? []).filter(
+    (account) => account.status === "active",
+  ).length
+  const totalBalance = (accounts ?? []).reduce(
+    (sum, account) => sum + account.currentBalance,
+    0,
+  )
+
+  const trendData = (trend ?? []).map((item) => ({
+    date: item.bucket,
+    income: item.income / 100,
+    expense: item.expense / 100,
+  }))
+
+  if (isSessionPending) {
+    return (
+      <LedgerShell title="数据总览">
+        <div className="px-4 text-sm text-muted-foreground lg:px-6">正在加载会话...</div>
+      </LedgerShell>
+    )
+  }
+
+  if (!session) {
+    return (
+      <LedgerShell
+        title="数据总览"
+        headerAction={
+          <Button asChild size="sm">
+            <Link href="/sign-in">去登录</Link>
+          </Button>
+        }
+      >
+        <div className="px-4 lg:px-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>需要登录后查看账本数据</CardTitle>
+              <CardDescription>登录后会自动初始化默认账本与分类。</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      </LedgerShell>
+    )
+  }
+
+  if (ledgerError) {
+    return (
+      <LedgerShell title="数据总览">
+        <div className="px-4 lg:px-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>初始化失败</CardTitle>
+              <CardDescription>{ledgerError}</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+      </LedgerShell>
+    )
+  }
+
+  if (!currentLedger) {
+    return (
+      <LedgerShell title="数据总览">
+        <div className="px-4 text-sm text-muted-foreground lg:px-6">正在初始化默认账本...</div>
+      </LedgerShell>
+    )
+  }
+
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
+    <LedgerShell
+      title="数据总览"
+      headerAction={
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/transactions">查看流水</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/transactions/new">记一笔</Link>
+          </Button>
+        </div>
       }
     >
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <SectionCards />
-              <div className="px-4 lg:px-6">
-                <ChartAreaInteractive />
-              </div>
-              <DataTable data={data} />
-            </div>
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+      <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-4 lg:px-6">
+        <Card>
+          <CardHeader>
+            <CardDescription>本月收入</CardDescription>
+            <CardTitle>{toCurrency(summary?.income ?? 0)}</CardTitle>
+          </CardHeader>
+          <CardFooter className="text-sm text-muted-foreground">
+            <IconArrowUpRight className="size-4 text-green-500" />
+            共 {summary?.transactionCount ?? 0} 笔记录
+          </CardFooter>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>本月支出</CardDescription>
+            <CardTitle>{toCurrency(summary?.expense ?? 0)}</CardTitle>
+          </CardHeader>
+          <CardFooter className="text-sm text-muted-foreground">
+            <IconArrowDownRight className="size-4 text-red-500" />
+            转账金额 {toCurrency(summary?.transfer ?? 0)}
+          </CardFooter>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>本月结余</CardDescription>
+            <CardTitle>{toCurrency(summary?.net ?? 0)}</CardTitle>
+          </CardHeader>
+          <CardFooter className="text-sm text-muted-foreground">
+            当前账本：{currentLedger.name}
+          </CardFooter>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>账户概览</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <IconWallet className="size-5" />
+              {toCurrency(totalBalance)}
+            </CardTitle>
+          </CardHeader>
+          <CardFooter className="text-sm text-muted-foreground">
+            活跃账户 {activeAccountCount} 个
+          </CardFooter>
+        </Card>
+      </div>
+
+      <div className="px-4 lg:px-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>近 30 天收支趋势</CardTitle>
+            <CardDescription>按天聚合展示收入和支出（单位：元）</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {trendData.length === 0 ? (
+              <div className="text-sm text-muted-foreground">暂无趋势数据，先记一笔吧。</div>
+            ) : (
+              <ChartContainer config={chartConfig} className="h-[260px] w-full">
+                <AreaChart data={trendData}>
+                  <defs>
+                    <linearGradient id="fillIncome" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-income)" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="var(--color-income)" stopOpacity={0.05} />
+                    </linearGradient>
+                    <linearGradient id="fillExpense" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-expense)" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="var(--color-expense)" stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={24}
+                    tickFormatter={toTrendLabel}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        indicator="dot"
+                        labelFormatter={(value) => value}
+                        formatter={(value, name) => [
+                          toCurrency(Number(value) * 100),
+                          name === "income" ? "收入" : "支出",
+                        ]}
+                      />
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="income"
+                    stroke="var(--color-income)"
+                    fill="url(#fillIncome)"
+                    strokeWidth={2}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="expense"
+                    stroke="var(--color-expense)"
+                    fill="url(#fillExpense)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="px-4 lg:px-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>最近流水</CardTitle>
+            <CardDescription>展示最近 8 条交易记录</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!transactions || transactions.length === 0 ? (
+              <div className="text-sm text-muted-foreground">暂无流水记录。</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>日期</TableHead>
+                    <TableHead>类型</TableHead>
+                    <TableHead>分类/账户</TableHead>
+                    <TableHead className="text-right">金额</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.map((item) => {
+                    const sourceAccount = accountMap.get(item.accountId)?.name ?? "未知账户"
+                    const targetAccount = item.transferAccountId
+                      ? accountMap.get(item.transferAccountId)?.name ?? "未知账户"
+                      : null
+                    const category = item.categoryId
+                      ? categoryMap.get(item.categoryId)?.name ?? "未分类"
+                      : "-"
+                    const sign = item.type === "expense" ? "-" : "+"
+                    const label =
+                      item.type === "transfer"
+                        ? `${sourceAccount} -> ${targetAccount ?? "-"}`
+                        : `${category} / ${sourceAccount}`
+                    return (
+                      <TableRow key={item._id}>
+                        <TableCell>{toDateLabel(item.occurredAt)}</TableCell>
+                        <TableCell>{getTypeLabel(item.type)}</TableCell>
+                        <TableCell className="max-w-[280px] truncate">{label}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          {sign}
+                          {toCurrency(item.amount)}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </LedgerShell>
   )
 }
