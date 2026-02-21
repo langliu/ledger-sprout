@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, type FormEvent } from "react"
+import { useEffect, useMemo, useState, type FormEvent } from "react"
 import { useMutation, useQuery } from "convex/react"
 
 import type { Doc, Id } from "@/convex/_generated/dataModel"
+import { api } from "@/convex/_generated/api"
 import { LedgerShell } from "@/components/ledger-shell"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,7 +32,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api } from "@/convex/_generated/api"
 import { useCurrentLedger } from "@/hooks/use-current-ledger"
 
 type AccountType = "cash" | "bank" | "credit" | "wallet"
@@ -66,6 +66,7 @@ export default function AccountsPage() {
   const { session, isSessionPending, currentLedger, ledgerError } = useCurrentLedger()
   const createAccount = useMutation(api.accounts.create)
   const updateAccount = useMutation(api.accounts.update)
+  const adjustBalance = useMutation(api.accounts.adjustBalance)
 
   const accounts = useQuery(
     api.accounts.list,
@@ -76,11 +77,18 @@ export default function AccountsPage() {
   const [type, setType] = useState<AccountType>("cash")
   const [initialBalance, setInitialBalance] = useState("0")
   const [isCreating, setIsCreating] = useState(false)
+
   const [editingId, setEditingId] = useState<Id<"accounts"> | null>(null)
   const [editingName, setEditingName] = useState("")
   const [editingType, setEditingType] = useState<AccountType>("cash")
   const [editingStatus, setEditingStatus] = useState<"active" | "inactive">("active")
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+
+  const [adjustAccountId, setAdjustAccountId] = useState<Id<"accounts"> | "">("")
+  const [adjustDelta, setAdjustDelta] = useState("")
+  const [adjustReason, setAdjustReason] = useState("")
+  const [isAdjusting, setIsAdjusting] = useState(false)
+
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const activeCount = useMemo(() => {
@@ -89,6 +97,15 @@ export default function AccountsPage() {
   const totalBalance = useMemo(() => {
     return (accounts ?? []).reduce((sum, account) => sum + account.currentBalance, 0)
   }, [accounts])
+
+  useEffect(() => {
+    if (!accounts || accounts.length === 0) {
+      return
+    }
+    if (!adjustAccountId || !accounts.some((account) => account._id === adjustAccountId)) {
+      setAdjustAccountId(accounts[0]._id)
+    }
+  }, [accounts, adjustAccountId])
 
   const startEdit = (account: Doc<"accounts">) => {
     setEditingId(account._id)
@@ -165,6 +182,40 @@ export default function AccountsPage() {
       }
     } finally {
       setIsSavingEdit(false)
+    }
+  }
+
+  const handleAdjustBalance = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setErrorMessage(null)
+
+    if (!adjustAccountId) {
+      setErrorMessage("请选择账户。")
+      return
+    }
+    const delta = toMinorUnits(adjustDelta)
+    if (delta === null || delta === 0) {
+      setErrorMessage("调整金额格式不正确，且不能为 0。")
+      return
+    }
+
+    setIsAdjusting(true)
+    try {
+      await adjustBalance({
+        accountId: adjustAccountId,
+        delta,
+        ...(adjustReason.trim().length > 0 ? { reason: adjustReason.trim() } : {}),
+      })
+      setAdjustDelta("")
+      setAdjustReason("")
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "message" in error) {
+        setErrorMessage(String(error.message))
+      } else {
+        setErrorMessage("余额调整失败，请稍后重试。")
+      }
+    } finally {
+      setIsAdjusting(false)
     }
   }
 
@@ -259,7 +310,7 @@ export default function AccountsPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-2 lg:px-6">
+      <div className="grid grid-cols-1 gap-4 px-4 lg:grid-cols-3 lg:px-6">
         <Card>
           <CardHeader>
             <CardTitle>新增账户</CardTitle>
@@ -351,9 +402,7 @@ export default function AccountsPage() {
                   <Label htmlFor="editingStatus">状态</Label>
                   <Select
                     value={editingStatus}
-                    onValueChange={(value) =>
-                      setEditingStatus(value as "active" | "inactive")
-                    }
+                    onValueChange={(value) => setEditingStatus(value as "active" | "inactive")}
                   >
                     <SelectTrigger id="editingStatus">
                       <SelectValue />
@@ -382,6 +431,60 @@ export default function AccountsPage() {
             ) : (
               <p className="text-sm text-muted-foreground">请选择一个账户进入编辑模式。</p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>余额调整</CardTitle>
+            <CardDescription>输入正数为增加，负数为减少，例如 `-100.00`。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={handleAdjustBalance}>
+              <div className="space-y-2">
+                <Label htmlFor="adjustAccount">账户</Label>
+                <Select
+                  value={adjustAccountId || undefined}
+                  onValueChange={(value) => setAdjustAccountId(value as Id<"accounts">)}
+                >
+                  <SelectTrigger id="adjustAccount">
+                    <SelectValue placeholder="请选择账户" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(accounts ?? []).map((account) => (
+                      <SelectItem key={account._id} value={account._id}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adjustDelta">调整金额（元）</Label>
+                <Input
+                  id="adjustDelta"
+                  placeholder="例如：100.00 或 -35.50"
+                  value={adjustDelta}
+                  onChange={(event) => {
+                    setAdjustDelta(event.target.value)
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adjustReason">原因（可选）</Label>
+                <Input
+                  id="adjustReason"
+                  placeholder="例如：月初对账"
+                  value={adjustReason}
+                  onChange={(event) => {
+                    setAdjustReason(event.target.value)
+                  }}
+                />
+              </div>
+              <Button type="submit" disabled={isAdjusting}>
+                {isAdjusting ? "调整中..." : "确认调整"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>

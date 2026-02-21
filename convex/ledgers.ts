@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-import { requireAuthUser } from "./lib/auth";
+import { getAuthOwnerKey, requireAuthUser } from "./lib/auth";
 
 const DEFAULT_LEDGER_NAME = "默认账本";
 
@@ -49,9 +49,10 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireAuthUser(ctx);
+    const ownerKey = getAuthOwnerKey(user);
     return await ctx.db
       .query("ledgers")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user", (q) => q.eq("userId", ownerKey))
       .collect();
   },
 });
@@ -60,11 +61,12 @@ export const ensureDefault = mutation({
   args: {},
   handler: async (ctx) => {
     const user = await requireAuthUser(ctx);
+    const ownerKey = getAuthOwnerKey(user);
 
     const existing = await ctx.db
       .query("ledgers")
       .withIndex("by_user_default", (q) =>
-        q.eq("userId", user._id).eq("isDefault", true),
+        q.eq("userId", ownerKey).eq("isDefault", true),
       )
       .first();
 
@@ -74,7 +76,7 @@ export const ensureDefault = mutation({
 
     const now = Date.now();
     const ledgerId = await ctx.db.insert("ledgers", {
-      userId: user._id,
+      userId: ownerKey,
       name: DEFAULT_LEDGER_NAME,
       isDefault: true,
       createdAt: now,
@@ -98,11 +100,12 @@ export const rename = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireAuthUser(ctx);
+    const ownerKey = getAuthOwnerKey(user);
     const ledger = await ctx.db.get(args.ledgerId);
     if (!ledger) {
       throw new ConvexError("Ledger not found");
     }
-    if (ledger.userId !== user._id) {
+    if (ledger.userId !== ownerKey) {
       throw new ConvexError("Forbidden");
     }
 

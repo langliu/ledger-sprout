@@ -5,7 +5,7 @@ import { tables } from "./betterAuth/schema";
 const schema = defineSchema({
   ...tables,
   ledgers: defineTable({
-    userId: v.id("user"),
+    userId: v.string(),
     name: v.string(),
     isDefault: v.boolean(),
     createdAt: v.number(),
