@@ -1,9 +1,9 @@
-"use client"
+'use client'
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useMemo } from "react"
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useMemo } from 'react'
 
-import { buildCallbackURL, createSignInPath } from "@/lib/auth-redirect"
+import { buildCallbackURL, createSignInPath } from '@/lib/auth-redirect'
 
 type UseAuthRedirectParams = Readonly<{
   session: unknown

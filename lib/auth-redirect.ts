@@ -1,4 +1,4 @@
-export const DEFAULT_CALLBACK_URL = "/dashboard"
+export const DEFAULT_CALLBACK_URL = '/dashboard'
 
 export function normalizeCallbackURL(rawCallbackURL: string | null | undefined) {
   if (!rawCallbackURL) {
@@ -6,7 +6,7 @@ export function normalizeCallbackURL(rawCallbackURL: string | null | undefined) 
   }
 
   const value = rawCallbackURL.trim()
-  if (!value.startsWith("/") || value.startsWith("//")) {
+  if (!value.startsWith('/') || value.startsWith('//')) {
     return DEFAULT_CALLBACK_URL
   }
 
@@ -15,7 +15,7 @@ export function normalizeCallbackURL(rawCallbackURL: string | null | undefined) 
 
 export function buildCallbackURL(pathname: string, search: string) {
   const currentPath = pathname.trim().length > 0 ? pathname : DEFAULT_CALLBACK_URL
-  const query = search.startsWith("?") ? search : search ? `?${search}` : ""
+  const query = search.startsWith('?') ? search : search ? `?${search}` : ''
   return normalizeCallbackURL(`${currentPath}${query}`)
 }
 

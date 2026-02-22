@@ -1,428 +1,423 @@
-import { ConvexError, v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { mutation, query } from "./_generated/server";
-import { requireLedgerOwner } from "./lib/auth";
+import { ConvexError, v } from 'convex/values'
+import type { Doc, Id } from './_generated/dataModel'
+import type { MutationCtx, QueryCtx } from './_generated/server'
+import { mutation, query } from './_generated/server'
+import { requireLedgerOwner } from './lib/auth'
 import {
   assertPositiveIntegerAmount,
   assertTimestamp,
   normalizeOptionalNote,
-} from "./lib/validation";
+} from './lib/validation'
 
-type AppCtx = QueryCtx | MutationCtx;
+type AppCtx = QueryCtx | MutationCtx
 
 const transactionTypeValidator = v.union(
-  v.literal("expense"),
-  v.literal("income"),
-  v.literal("transfer"),
-);
+  v.literal('expense'),
+  v.literal('income'),
+  v.literal('transfer'),
+)
 
 function assertNonNegativeIntegerAmount(value: number, fieldName: string) {
   if (!Number.isInteger(value) || value < 0) {
-    throw new ConvexError(`${fieldName} must be a non-negative integer`);
+    throw new ConvexError(`${fieldName} must be a non-negative integer`)
   }
 }
 
-async function getAccountOrThrow(ctx: AppCtx, accountId: Id<"accounts">) {
-  const account = await ctx.db.get(accountId);
+async function getAccountOrThrow(ctx: AppCtx, accountId: Id<'accounts'>) {
+  const account = await ctx.db.get(accountId)
   if (!account) {
-    throw new ConvexError("Account not found");
+    throw new ConvexError('Account not found')
   }
-  return account;
+  return account
 }
 
-async function getCategoryOrThrow(ctx: AppCtx, categoryId: Id<"categories">) {
-  const category = await ctx.db.get(categoryId);
+async function getCategoryOrThrow(ctx: AppCtx, categoryId: Id<'categories'>) {
+  const category = await ctx.db.get(categoryId)
   if (!category) {
-    throw new ConvexError("Category not found");
+    throw new ConvexError('Category not found')
   }
-  return category;
+  return category
 }
 
-function ensureAccountInLedger(account: Doc<"accounts">, ledgerId: Id<"ledgers">) {
+function ensureAccountInLedger(account: Doc<'accounts'>, ledgerId: Id<'ledgers'>) {
   if (account.ledgerId !== ledgerId) {
-    throw new ConvexError("Account does not belong to ledger");
+    throw new ConvexError('Account does not belong to ledger')
   }
 }
 
-function ensureCategoryInLedger(
-  category: Doc<"categories">,
-  ledgerId: Id<"ledgers">,
-) {
+function ensureCategoryInLedger(category: Doc<'categories'>, ledgerId: Id<'ledgers'>) {
   if (category.ledgerId !== ledgerId) {
-    throw new ConvexError("Category does not belong to ledger");
+    throw new ConvexError('Category does not belong to ledger')
   }
 }
 
 export const list = query({
   args: {
-    ledgerId: v.id("ledgers"),
-    type: v.optional(transactionTypeValidator),
-    accountId: v.optional(v.id("accounts")),
-    categoryId: v.optional(v.id("categories")),
+    accountId: v.optional(v.id('accounts')),
+    categoryId: v.optional(v.id('categories')),
     from: v.optional(v.number()),
-    to: v.optional(v.number()),
-    minAmount: v.optional(v.number()),
-    maxAmount: v.optional(v.number()),
-    search: v.optional(v.string()),
+    ledgerId: v.id('ledgers'),
     limit: v.optional(v.number()),
+    maxAmount: v.optional(v.number()),
+    minAmount: v.optional(v.number()),
+    search: v.optional(v.string()),
+    to: v.optional(v.number()),
+    type: v.optional(transactionTypeValidator),
   },
   handler: async (ctx, args) => {
-    await requireLedgerOwner(ctx, args.ledgerId);
+    await requireLedgerOwner(ctx, args.ledgerId)
 
     if (args.from !== undefined) {
-      assertTimestamp(args.from, "from");
+      assertTimestamp(args.from, 'from')
     }
     if (args.to !== undefined) {
-      assertTimestamp(args.to, "to");
+      assertTimestamp(args.to, 'to')
     }
     if (args.from !== undefined && args.to !== undefined && args.from > args.to) {
-      throw new ConvexError("from must be less than or equal to to");
+      throw new ConvexError('from must be less than or equal to to')
     }
     if (args.minAmount !== undefined) {
-      assertNonNegativeIntegerAmount(args.minAmount, "minAmount");
+      assertNonNegativeIntegerAmount(args.minAmount, 'minAmount')
     }
     if (args.maxAmount !== undefined) {
-      assertNonNegativeIntegerAmount(args.maxAmount, "maxAmount");
+      assertNonNegativeIntegerAmount(args.maxAmount, 'maxAmount')
     }
     if (
       args.minAmount !== undefined &&
       args.maxAmount !== undefined &&
       args.minAmount > args.maxAmount
     ) {
-      throw new ConvexError("minAmount must be less than or equal to maxAmount");
+      throw new ConvexError('minAmount must be less than or equal to maxAmount')
     }
 
-    const limit = args.limit ?? 100;
+    const limit = args.limit ?? 100
     if (!Number.isInteger(limit) || limit <= 0 || limit > 500) {
-      throw new ConvexError("limit must be an integer between 1 and 500");
+      throw new ConvexError('limit must be an integer between 1 and 500')
     }
 
-    const from = args.from ?? 0;
-    const to = args.to ?? Number.MAX_SAFE_INTEGER;
+    const from = args.from ?? 0
+    const to = args.to ?? Number.MAX_SAFE_INTEGER
 
     // Prefer narrower indexes before applying in-memory filters.
-    let docs: Doc<"transactions">[];
+    let docs: Doc<'transactions'>[]
     if (args.categoryId !== undefined) {
-      const categoryId = args.categoryId;
+      const categoryId = args.categoryId
       docs = await ctx.db
-        .query("transactions")
-        .withIndex("by_ledger_category_occurredAt", (q) =>
+        .query('transactions')
+        .withIndex('by_ledger_category_occurredAt', (q) =>
           q
-            .eq("ledgerId", args.ledgerId)
-            .eq("categoryId", categoryId)
-            .gte("occurredAt", from)
-            .lte("occurredAt", to),
+            .eq('ledgerId', args.ledgerId)
+            .eq('categoryId', categoryId)
+            .gte('occurredAt', from)
+            .lte('occurredAt', to),
         )
-        .order("desc")
-        .collect();
+        .order('desc')
+        .collect()
     } else if (args.type !== undefined) {
-      const type = args.type;
+      const type = args.type
       docs = await ctx.db
-        .query("transactions")
-        .withIndex("by_ledger_type_occurredAt", (q) =>
+        .query('transactions')
+        .withIndex('by_ledger_type_occurredAt', (q) =>
           q
-            .eq("ledgerId", args.ledgerId)
-            .eq("type", type)
-            .gte("occurredAt", from)
-            .lte("occurredAt", to),
+            .eq('ledgerId', args.ledgerId)
+            .eq('type', type)
+            .gte('occurredAt', from)
+            .lte('occurredAt', to),
         )
-        .order("desc")
-        .collect();
+        .order('desc')
+        .collect()
     } else {
       docs = await ctx.db
-        .query("transactions")
-        .withIndex("by_ledger_occurredAt", (q) =>
-          q.eq("ledgerId", args.ledgerId).gte("occurredAt", from).lte("occurredAt", to),
+        .query('transactions')
+        .withIndex('by_ledger_occurredAt', (q) =>
+          q.eq('ledgerId', args.ledgerId).gte('occurredAt', from).lte('occurredAt', to),
         )
-        .order("desc")
-        .collect();
+        .order('desc')
+        .collect()
     }
 
     if (args.type !== undefined) {
-      docs = docs.filter((doc) => doc.type === args.type);
+      docs = docs.filter((doc) => doc.type === args.type)
     }
     if (args.accountId !== undefined) {
       docs = docs.filter(
-        (doc) =>
-          doc.accountId === args.accountId ||
-          doc.transferAccountId === args.accountId,
-      );
+        (doc) => doc.accountId === args.accountId || doc.transferAccountId === args.accountId,
+      )
     }
     if (args.categoryId !== undefined) {
-      docs = docs.filter((doc) => doc.categoryId === args.categoryId);
+      docs = docs.filter((doc) => doc.categoryId === args.categoryId)
     }
-    const minAmount = args.minAmount;
-    const maxAmount = args.maxAmount;
+    const minAmount = args.minAmount
+    const maxAmount = args.maxAmount
     if (minAmount !== undefined) {
-      docs = docs.filter((doc) => doc.amount >= minAmount);
+      docs = docs.filter((doc) => doc.amount >= minAmount)
     }
     if (maxAmount !== undefined) {
-      docs = docs.filter((doc) => doc.amount <= maxAmount);
+      docs = docs.filter((doc) => doc.amount <= maxAmount)
     }
     if (args.search !== undefined) {
-      const keyword = args.search.trim().toLowerCase();
+      const keyword = args.search.trim().toLowerCase()
       if (keyword.length > 0) {
-        docs = docs.filter((doc) => (doc.note ?? "").toLowerCase().includes(keyword));
+        docs = docs.filter((doc) => (doc.note ?? '').toLowerCase().includes(keyword))
       }
     }
 
-    return docs.slice(0, limit);
+    return docs.slice(0, limit)
   },
-});
+})
 
 export const createExpense = mutation({
   args: {
-    ledgerId: v.id("ledgers"),
-    accountId: v.id("accounts"),
-    categoryId: v.id("categories"),
+    accountId: v.id('accounts'),
     amount: v.number(),
-    occurredAt: v.number(),
+    categoryId: v.id('categories'),
+    ledgerId: v.id('ledgers'),
     note: v.optional(v.string()),
+    occurredAt: v.number(),
   },
   handler: async (ctx, args) => {
-    await requireLedgerOwner(ctx, args.ledgerId);
-    assertPositiveIntegerAmount(args.amount, "amount");
-    assertTimestamp(args.occurredAt, "occurredAt");
+    await requireLedgerOwner(ctx, args.ledgerId)
+    assertPositiveIntegerAmount(args.amount, 'amount')
+    assertTimestamp(args.occurredAt, 'occurredAt')
 
-    const account = await getAccountOrThrow(ctx, args.accountId);
-    ensureAccountInLedger(account, args.ledgerId);
-    if (account.status !== "active") {
-      throw new ConvexError("Account is inactive");
+    const account = await getAccountOrThrow(ctx, args.accountId)
+    ensureAccountInLedger(account, args.ledgerId)
+    if (account.status !== 'active') {
+      throw new ConvexError('Account is inactive')
     }
 
-    const category = await getCategoryOrThrow(ctx, args.categoryId);
-    ensureCategoryInLedger(category, args.ledgerId);
-    if (category.type !== "expense") {
-      throw new ConvexError("Category type must be expense");
+    const category = await getCategoryOrThrow(ctx, args.categoryId)
+    ensureCategoryInLedger(category, args.ledgerId)
+    if (category.type !== 'expense') {
+      throw new ConvexError('Category type must be expense')
     }
-    if (category.status !== "active") {
-      throw new ConvexError("Category is inactive");
+    if (category.status !== 'active') {
+      throw new ConvexError('Category is inactive')
     }
 
-    const note = normalizeOptionalNote(args.note);
-    const now = Date.now();
-    const transactionId = await ctx.db.insert("transactions", {
-      ledgerId: args.ledgerId,
+    const note = normalizeOptionalNote(args.note)
+    const now = Date.now()
+    const transactionId = await ctx.db.insert('transactions', {
       accountId: args.accountId,
-      type: "expense",
       amount: args.amount,
-      occurredAt: args.occurredAt,
       categoryId: args.categoryId,
+      ledgerId: args.ledgerId,
+      occurredAt: args.occurredAt,
+      type: 'expense',
       ...(note !== undefined ? { note } : {}),
       createdAt: now,
       updatedAt: now,
-    });
+    })
 
     await ctx.db.patch(args.accountId, {
       currentBalance: account.currentBalance - args.amount,
       updatedAt: now,
-    });
+    })
 
-    return await ctx.db.get(transactionId);
+    return await ctx.db.get(transactionId)
   },
-});
+})
 
 export const createIncome = mutation({
   args: {
-    ledgerId: v.id("ledgers"),
-    accountId: v.id("accounts"),
-    categoryId: v.id("categories"),
+    accountId: v.id('accounts'),
     amount: v.number(),
-    occurredAt: v.number(),
+    categoryId: v.id('categories'),
+    ledgerId: v.id('ledgers'),
     note: v.optional(v.string()),
+    occurredAt: v.number(),
   },
   handler: async (ctx, args) => {
-    await requireLedgerOwner(ctx, args.ledgerId);
-    assertPositiveIntegerAmount(args.amount, "amount");
-    assertTimestamp(args.occurredAt, "occurredAt");
+    await requireLedgerOwner(ctx, args.ledgerId)
+    assertPositiveIntegerAmount(args.amount, 'amount')
+    assertTimestamp(args.occurredAt, 'occurredAt')
 
-    const account = await getAccountOrThrow(ctx, args.accountId);
-    ensureAccountInLedger(account, args.ledgerId);
-    if (account.status !== "active") {
-      throw new ConvexError("Account is inactive");
+    const account = await getAccountOrThrow(ctx, args.accountId)
+    ensureAccountInLedger(account, args.ledgerId)
+    if (account.status !== 'active') {
+      throw new ConvexError('Account is inactive')
     }
 
-    const category = await getCategoryOrThrow(ctx, args.categoryId);
-    ensureCategoryInLedger(category, args.ledgerId);
-    if (category.type !== "income") {
-      throw new ConvexError("Category type must be income");
+    const category = await getCategoryOrThrow(ctx, args.categoryId)
+    ensureCategoryInLedger(category, args.ledgerId)
+    if (category.type !== 'income') {
+      throw new ConvexError('Category type must be income')
     }
-    if (category.status !== "active") {
-      throw new ConvexError("Category is inactive");
+    if (category.status !== 'active') {
+      throw new ConvexError('Category is inactive')
     }
 
-    const note = normalizeOptionalNote(args.note);
-    const now = Date.now();
-    const transactionId = await ctx.db.insert("transactions", {
-      ledgerId: args.ledgerId,
+    const note = normalizeOptionalNote(args.note)
+    const now = Date.now()
+    const transactionId = await ctx.db.insert('transactions', {
       accountId: args.accountId,
-      type: "income",
       amount: args.amount,
-      occurredAt: args.occurredAt,
       categoryId: args.categoryId,
+      ledgerId: args.ledgerId,
+      occurredAt: args.occurredAt,
+      type: 'income',
       ...(note !== undefined ? { note } : {}),
       createdAt: now,
       updatedAt: now,
-    });
+    })
 
     await ctx.db.patch(args.accountId, {
       currentBalance: account.currentBalance + args.amount,
       updatedAt: now,
-    });
+    })
 
-    return await ctx.db.get(transactionId);
+    return await ctx.db.get(transactionId)
   },
-});
+})
 
 export const createTransfer = mutation({
   args: {
-    ledgerId: v.id("ledgers"),
-    fromAccountId: v.id("accounts"),
-    toAccountId: v.id("accounts"),
     amount: v.number(),
-    occurredAt: v.number(),
+    fromAccountId: v.id('accounts'),
+    ledgerId: v.id('ledgers'),
     note: v.optional(v.string()),
+    occurredAt: v.number(),
+    toAccountId: v.id('accounts'),
   },
   handler: async (ctx, args) => {
-    await requireLedgerOwner(ctx, args.ledgerId);
-    assertPositiveIntegerAmount(args.amount, "amount");
-    assertTimestamp(args.occurredAt, "occurredAt");
+    await requireLedgerOwner(ctx, args.ledgerId)
+    assertPositiveIntegerAmount(args.amount, 'amount')
+    assertTimestamp(args.occurredAt, 'occurredAt')
 
     if (args.fromAccountId === args.toAccountId) {
-      throw new ConvexError("fromAccountId and toAccountId must be different");
+      throw new ConvexError('fromAccountId and toAccountId must be different')
     }
 
-    const fromAccount = await getAccountOrThrow(ctx, args.fromAccountId);
-    const toAccount = await getAccountOrThrow(ctx, args.toAccountId);
-    ensureAccountInLedger(fromAccount, args.ledgerId);
-    ensureAccountInLedger(toAccount, args.ledgerId);
+    const fromAccount = await getAccountOrThrow(ctx, args.fromAccountId)
+    const toAccount = await getAccountOrThrow(ctx, args.toAccountId)
+    ensureAccountInLedger(fromAccount, args.ledgerId)
+    ensureAccountInLedger(toAccount, args.ledgerId)
 
-    if (fromAccount.status !== "active" || toAccount.status !== "active") {
-      throw new ConvexError("Transfer accounts must be active");
+    if (fromAccount.status !== 'active' || toAccount.status !== 'active') {
+      throw new ConvexError('Transfer accounts must be active')
     }
 
-    const note = normalizeOptionalNote(args.note);
-    const now = Date.now();
-    const transactionId = await ctx.db.insert("transactions", {
-      ledgerId: args.ledgerId,
+    const note = normalizeOptionalNote(args.note)
+    const now = Date.now()
+    const transactionId = await ctx.db.insert('transactions', {
       accountId: args.fromAccountId,
-      type: "transfer",
       amount: args.amount,
+      ledgerId: args.ledgerId,
       occurredAt: args.occurredAt,
       transferAccountId: args.toAccountId,
+      type: 'transfer',
       ...(note !== undefined ? { note } : {}),
       createdAt: now,
       updatedAt: now,
-    });
+    })
 
     await ctx.db.patch(args.fromAccountId, {
       currentBalance: fromAccount.currentBalance - args.amount,
       updatedAt: now,
-    });
+    })
     await ctx.db.patch(args.toAccountId, {
       currentBalance: toAccount.currentBalance + args.amount,
       updatedAt: now,
-    });
+    })
 
-    return await ctx.db.get(transactionId);
+    return await ctx.db.get(transactionId)
   },
-});
+})
 
 export const update = mutation({
   args: {
-    transactionId: v.id("transactions"),
-    accountId: v.optional(v.id("accounts")),
-    transferAccountId: v.optional(v.id("accounts")),
+    accountId: v.optional(v.id('accounts')),
     amount: v.optional(v.number()),
-    occurredAt: v.optional(v.number()),
-    categoryId: v.optional(v.id("categories")),
-    note: v.optional(v.string()),
+    categoryId: v.optional(v.id('categories')),
     clearNote: v.optional(v.boolean()),
+    note: v.optional(v.string()),
+    occurredAt: v.optional(v.number()),
+    transactionId: v.id('transactions'),
+    transferAccountId: v.optional(v.id('accounts')),
   },
   handler: async (ctx, args) => {
-    const transaction = await ctx.db.get(args.transactionId);
+    const transaction = await ctx.db.get(args.transactionId)
     if (!transaction) {
-      throw new ConvexError("Transaction not found");
+      throw new ConvexError('Transaction not found')
     }
 
-    await requireLedgerOwner(ctx, transaction.ledgerId);
+    await requireLedgerOwner(ctx, transaction.ledgerId)
 
-    let nextAmount = transaction.amount;
+    let nextAmount = transaction.amount
     if (args.amount !== undefined) {
-      assertPositiveIntegerAmount(args.amount, "amount");
-      nextAmount = args.amount;
+      assertPositiveIntegerAmount(args.amount, 'amount')
+      nextAmount = args.amount
     }
 
     const patch: {
-      accountId?: Id<"accounts">;
-      transferAccountId?: Id<"accounts">;
-      amount?: number;
-      occurredAt?: number;
-      categoryId?: Id<"categories">;
-      note?: string;
-      updatedAt: number;
+      accountId?: Id<'accounts'>
+      transferAccountId?: Id<'accounts'>
+      amount?: number
+      occurredAt?: number
+      categoryId?: Id<'categories'>
+      note?: string
+      updatedAt: number
     } = {
       updatedAt: Date.now(),
-    };
+    }
 
     if (args.amount !== undefined) {
-      patch.amount = args.amount;
+      patch.amount = args.amount
     }
     if (args.accountId !== undefined) {
-      patch.accountId = args.accountId;
+      patch.accountId = args.accountId
     }
     if (args.transferAccountId !== undefined) {
-      patch.transferAccountId = args.transferAccountId;
+      patch.transferAccountId = args.transferAccountId
     }
     if (args.occurredAt !== undefined) {
-      assertTimestamp(args.occurredAt, "occurredAt");
-      patch.occurredAt = args.occurredAt;
+      assertTimestamp(args.occurredAt, 'occurredAt')
+      patch.occurredAt = args.occurredAt
     }
     if (args.clearNote) {
       if (args.note !== undefined) {
-        throw new ConvexError("note and clearNote cannot be used together");
+        throw new ConvexError('note and clearNote cannot be used together')
       }
-      patch.note = "";
+      patch.note = ''
     }
     if (args.note !== undefined) {
-      const note = args.note.trim();
+      const note = args.note.trim()
       if (note.length === 0) {
-        throw new ConvexError("note cannot be empty");
+        throw new ConvexError('note cannot be empty')
       }
-      patch.note = note;
+      patch.note = note
     }
 
-    if (transaction.type === "transfer") {
+    if (transaction.type === 'transfer') {
       if (args.categoryId !== undefined) {
-        throw new ConvexError("Transfer transaction cannot set categoryId");
+        throw new ConvexError('Transfer transaction cannot set categoryId')
       }
 
-      const oldFromAccountId = transaction.accountId;
-      const oldToAccountId = transaction.transferAccountId;
+      const oldFromAccountId = transaction.accountId
+      const oldToAccountId = transaction.transferAccountId
       if (!oldToAccountId) {
-        throw new ConvexError("Transfer transaction is missing transferAccountId");
+        throw new ConvexError('Transfer transaction is missing transferAccountId')
       }
 
-      const nextFromAccountId = args.accountId ?? oldFromAccountId;
-      const nextToAccountId = args.transferAccountId ?? oldToAccountId;
+      const nextFromAccountId = args.accountId ?? oldFromAccountId
+      const nextToAccountId = args.transferAccountId ?? oldToAccountId
 
       if (nextFromAccountId === nextToAccountId) {
-        throw new ConvexError("fromAccountId and toAccountId must be different");
+        throw new ConvexError('fromAccountId and toAccountId must be different')
       }
 
       if (args.accountId !== undefined && args.accountId !== oldFromAccountId) {
-        const nextFromAccount = await getAccountOrThrow(ctx, nextFromAccountId);
-        ensureAccountInLedger(nextFromAccount, transaction.ledgerId);
-        if (nextFromAccount.status !== "active") {
-          throw new ConvexError("Account is inactive");
+        const nextFromAccount = await getAccountOrThrow(ctx, nextFromAccountId)
+        ensureAccountInLedger(nextFromAccount, transaction.ledgerId)
+        if (nextFromAccount.status !== 'active') {
+          throw new ConvexError('Account is inactive')
         }
       }
       if (args.transferAccountId !== undefined && args.transferAccountId !== oldToAccountId) {
-        const nextToAccount = await getAccountOrThrow(ctx, nextToAccountId);
-        ensureAccountInLedger(nextToAccount, transaction.ledgerId);
-        if (nextToAccount.status !== "active") {
-          throw new ConvexError("Transfer account is inactive");
+        const nextToAccount = await getAccountOrThrow(ctx, nextToAccountId)
+        ensureAccountInLedger(nextToAccount, transaction.ledgerId)
+        if (nextToAccount.status !== 'active') {
+          throw new ConvexError('Transfer account is inactive')
         }
       }
 
@@ -431,152 +426,152 @@ export const update = mutation({
         args.accountId !== undefined ||
         args.transferAccountId !== undefined
       ) {
-        const affectedAccountIds = new Set<Id<"accounts">>([
+        const affectedAccountIds = new Set<Id<'accounts'>>([
           oldFromAccountId,
           oldToAccountId,
           nextFromAccountId,
           nextToAccountId,
-        ]);
-        const accounts = new Map<Id<"accounts">, Doc<"accounts">>();
+        ])
+        const accounts = new Map<Id<'accounts'>, Doc<'accounts'>>()
         for (const accountId of affectedAccountIds) {
-          const account = await getAccountOrThrow(ctx, accountId);
-          accounts.set(accountId, account);
+          const account = await getAccountOrThrow(ctx, accountId)
+          accounts.set(accountId, account)
         }
 
-        const deltas = new Map<Id<"accounts">, number>();
-        const addDelta = (accountId: Id<"accounts">, delta: number) => {
-          deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta);
-        };
+        const deltas = new Map<Id<'accounts'>, number>()
+        const addDelta = (accountId: Id<'accounts'>, delta: number) => {
+          deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta)
+        }
 
-        addDelta(oldFromAccountId, transaction.amount);
-        addDelta(oldToAccountId, -transaction.amount);
-        addDelta(nextFromAccountId, -nextAmount);
-        addDelta(nextToAccountId, nextAmount);
+        addDelta(oldFromAccountId, transaction.amount)
+        addDelta(oldToAccountId, -transaction.amount)
+        addDelta(nextFromAccountId, -nextAmount)
+        addDelta(nextToAccountId, nextAmount)
 
         for (const [accountId, delta] of deltas) {
           if (delta === 0) {
-            continue;
+            continue
           }
-          const account = accounts.get(accountId);
+          const account = accounts.get(accountId)
           if (!account) {
-            throw new ConvexError("Account not found");
+            throw new ConvexError('Account not found')
           }
           await ctx.db.patch(accountId, {
             currentBalance: account.currentBalance + delta,
             updatedAt: patch.updatedAt,
-          });
+          })
         }
       }
     } else {
       if (args.transferAccountId !== undefined) {
-        throw new ConvexError("Non-transfer transaction cannot set transferAccountId");
+        throw new ConvexError('Non-transfer transaction cannot set transferAccountId')
       }
 
-      const nextAccountId = args.accountId ?? transaction.accountId;
+      const nextAccountId = args.accountId ?? transaction.accountId
       if (args.accountId !== undefined && args.accountId !== transaction.accountId) {
-        const nextAccount = await getAccountOrThrow(ctx, nextAccountId);
-        ensureAccountInLedger(nextAccount, transaction.ledgerId);
-        if (nextAccount.status !== "active") {
-          throw new ConvexError("Account is inactive");
+        const nextAccount = await getAccountOrThrow(ctx, nextAccountId)
+        ensureAccountInLedger(nextAccount, transaction.ledgerId)
+        if (nextAccount.status !== 'active') {
+          throw new ConvexError('Account is inactive')
         }
       }
 
       if (args.categoryId !== undefined) {
-        const category = await getCategoryOrThrow(ctx, args.categoryId);
-        ensureCategoryInLedger(category, transaction.ledgerId);
+        const category = await getCategoryOrThrow(ctx, args.categoryId)
+        ensureCategoryInLedger(category, transaction.ledgerId)
         if (category.type !== transaction.type) {
-          throw new ConvexError("Category type mismatch");
+          throw new ConvexError('Category type mismatch')
         }
-        if (category.status !== "active") {
-          throw new ConvexError("Category is inactive");
+        if (category.status !== 'active') {
+          throw new ConvexError('Category is inactive')
         }
-        patch.categoryId = args.categoryId;
+        patch.categoryId = args.categoryId
       }
 
       if (args.amount !== undefined || args.accountId !== undefined) {
-        const oldAccount = await getAccountOrThrow(ctx, transaction.accountId);
+        const oldAccount = await getAccountOrThrow(ctx, transaction.accountId)
         const targetAccount =
           nextAccountId === transaction.accountId
             ? oldAccount
-            : await getAccountOrThrow(ctx, nextAccountId);
-        ensureAccountInLedger(oldAccount, transaction.ledgerId);
-        ensureAccountInLedger(targetAccount, transaction.ledgerId);
+            : await getAccountOrThrow(ctx, nextAccountId)
+        ensureAccountInLedger(oldAccount, transaction.ledgerId)
+        ensureAccountInLedger(targetAccount, transaction.ledgerId)
 
-        const sign = transaction.type === "expense" ? -1 : 1;
-        const deltas = new Map<Id<"accounts">, number>();
-        const addDelta = (accountId: Id<"accounts">, delta: number) => {
-          deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta);
-        };
+        const sign = transaction.type === 'expense' ? -1 : 1
+        const deltas = new Map<Id<'accounts'>, number>()
+        const addDelta = (accountId: Id<'accounts'>, delta: number) => {
+          deltas.set(accountId, (deltas.get(accountId) ?? 0) + delta)
+        }
 
-        addDelta(transaction.accountId, -sign * transaction.amount);
-        addDelta(nextAccountId, sign * nextAmount);
+        addDelta(transaction.accountId, -sign * transaction.amount)
+        addDelta(nextAccountId, sign * nextAmount)
 
         for (const [accountId, delta] of deltas) {
           if (delta === 0) {
-            continue;
+            continue
           }
           const account =
             accountId === oldAccount._id
               ? oldAccount
               : accountId === targetAccount._id
                 ? targetAccount
-                : await getAccountOrThrow(ctx, accountId);
+                : await getAccountOrThrow(ctx, accountId)
           await ctx.db.patch(accountId, {
             currentBalance: account.currentBalance + delta,
             updatedAt: patch.updatedAt,
-          });
+          })
         }
       }
     }
 
-    await ctx.db.patch(args.transactionId, patch);
-    return await ctx.db.get(args.transactionId);
+    await ctx.db.patch(args.transactionId, patch)
+    return await ctx.db.get(args.transactionId)
   },
-});
+})
 
 export const remove = mutation({
   args: {
-    transactionId: v.id("transactions"),
+    transactionId: v.id('transactions'),
   },
   handler: async (ctx, args) => {
-    const transaction = await ctx.db.get(args.transactionId);
+    const transaction = await ctx.db.get(args.transactionId)
     if (!transaction) {
-      throw new ConvexError("Transaction not found");
+      throw new ConvexError('Transaction not found')
     }
 
-    await requireLedgerOwner(ctx, transaction.ledgerId);
-    const updatedAt = Date.now();
+    await requireLedgerOwner(ctx, transaction.ledgerId)
+    const updatedAt = Date.now()
 
-    if (transaction.type === "expense") {
-      const account = await getAccountOrThrow(ctx, transaction.accountId);
+    if (transaction.type === 'expense') {
+      const account = await getAccountOrThrow(ctx, transaction.accountId)
       await ctx.db.patch(transaction.accountId, {
         currentBalance: account.currentBalance + transaction.amount,
         updatedAt,
-      });
-    } else if (transaction.type === "income") {
-      const account = await getAccountOrThrow(ctx, transaction.accountId);
+      })
+    } else if (transaction.type === 'income') {
+      const account = await getAccountOrThrow(ctx, transaction.accountId)
       await ctx.db.patch(transaction.accountId, {
         currentBalance: account.currentBalance - transaction.amount,
         updatedAt,
-      });
+      })
     } else {
-      const toAccountId = transaction.transferAccountId;
+      const toAccountId = transaction.transferAccountId
       if (!toAccountId) {
-        throw new ConvexError("Transfer transaction is missing transferAccountId");
+        throw new ConvexError('Transfer transaction is missing transferAccountId')
       }
-      const fromAccount = await getAccountOrThrow(ctx, transaction.accountId);
-      const toAccount = await getAccountOrThrow(ctx, toAccountId);
+      const fromAccount = await getAccountOrThrow(ctx, transaction.accountId)
+      const toAccount = await getAccountOrThrow(ctx, toAccountId)
       await ctx.db.patch(transaction.accountId, {
         currentBalance: fromAccount.currentBalance + transaction.amount,
         updatedAt,
-      });
+      })
       await ctx.db.patch(toAccountId, {
         currentBalance: toAccount.currentBalance - transaction.amount,
         updatedAt,
-      });
+      })
     }
 
-    await ctx.db.delete(args.transactionId);
-    return { transactionId: args.transactionId };
+    await ctx.db.delete(args.transactionId)
+    return { transactionId: args.transactionId }
   },
-});
+})

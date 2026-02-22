@@ -1,22 +1,18 @@
-"use client"
+'use client'
 
-import { useEffect, useMemo, useState } from "react"
-import { CalendarClockIcon } from "lucide-react"
+import { CalendarClockIcon } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 
-import { Button } from "@/components/ui/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { cn } from "@/lib/utils"
+} from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 
 type PickerParts = {
   year: number
@@ -35,7 +31,7 @@ type DateTimePickerProps = Readonly<{
 }>
 
 function pad2(value: number) {
-  return String(value).padStart(2, "0")
+  return String(value).padStart(2, '0')
 }
 
 function toRoundedMinuteTimestamp(timestamp: number) {
@@ -48,11 +44,11 @@ function toParts(timestamp: number | null | undefined): PickerParts {
     timestamp && Number.isFinite(timestamp) && timestamp > 0 ? timestamp : fallback,
   )
   return {
-    year: date.getFullYear(),
-    month: date.getMonth() + 1,
     day: date.getDate(),
     hour: date.getHours(),
     minute: date.getMinutes(),
+    month: date.getMonth() + 1,
+    year: date.getFullYear(),
   }
 }
 
@@ -62,20 +58,12 @@ function getDaysInMonth(year: number, month: number) {
 
 function toTimestamp(parts: PickerParts) {
   const safeDay = Math.min(parts.day, getDaysInMonth(parts.year, parts.month))
-  return new Date(
-    parts.year,
-    parts.month - 1,
-    safeDay,
-    parts.hour,
-    parts.minute,
-    0,
-    0,
-  ).getTime()
+  return new Date(parts.year, parts.month - 1, safeDay, parts.hour, parts.minute, 0, 0).getTime()
 }
 
 function formatDateTime(timestamp: number | null) {
   if (!timestamp || !Number.isFinite(timestamp) || timestamp <= 0) {
-    return ""
+    return ''
   }
   const date = new Date(timestamp)
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(
@@ -91,7 +79,7 @@ export function DateTimePicker({
   value,
   onChange,
   disabled,
-  placeholder = "请选择日期和时间",
+  placeholder = '请选择日期和时间',
   className,
 }: DateTimePickerProps) {
   const [open, setOpen] = useState(false)
@@ -127,30 +115,30 @@ export function DateTimePicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
         <Button
-          type="button"
-          variant="outline"
-          className={cn("w-full justify-between font-normal", className)}
+          className={cn('w-full justify-between font-normal', className)}
           disabled={disabled}
+          type='button'
+          variant='outline'
         >
-          <span className={cn(!value ? "text-muted-foreground" : undefined)}>
+          <span className={cn(!value ? 'text-muted-foreground' : undefined)}>
             {formatDateTime(value) || placeholder}
           </span>
-          <CalendarClockIcon className="size-4 opacity-70" />
+          <CalendarClockIcon className='size-4 opacity-70' />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[340px] space-y-3 p-3">
-        <div className="grid grid-cols-3 gap-2">
+      <PopoverContent align='start' className='w-[340px] space-y-3 p-3'>
+        <div className='grid grid-cols-3 gap-2'>
           <Select
-            value={String(parts.year)}
             onValueChange={(nextValue) => {
               updateParts({ year: Number.parseInt(nextValue, 10) })
             }}
+            value={String(parts.year)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="年" />
+              <SelectValue placeholder='年' />
             </SelectTrigger>
             <SelectContent>
               {years.map((item) => (
@@ -161,13 +149,13 @@ export function DateTimePicker({
             </SelectContent>
           </Select>
           <Select
-            value={String(parts.month)}
             onValueChange={(nextValue) => {
               updateParts({ month: Number.parseInt(nextValue, 10) })
             }}
+            value={String(parts.month)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="月" />
+              <SelectValue placeholder='月' />
             </SelectTrigger>
             <SelectContent>
               {months.map((item) => (
@@ -178,13 +166,13 @@ export function DateTimePicker({
             </SelectContent>
           </Select>
           <Select
-            value={String(parts.day)}
             onValueChange={(nextValue) => {
               updateParts({ day: Number.parseInt(nextValue, 10) })
             }}
+            value={String(parts.day)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="日" />
+              <SelectValue placeholder='日' />
             </SelectTrigger>
             <SelectContent>
               {days.map((item) => (
@@ -195,15 +183,15 @@ export function DateTimePicker({
             </SelectContent>
           </Select>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className='grid grid-cols-2 gap-2'>
           <Select
-            value={String(parts.hour)}
             onValueChange={(nextValue) => {
               updateParts({ hour: Number.parseInt(nextValue, 10) })
             }}
+            value={String(parts.hour)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="时" />
+              <SelectValue placeholder='时' />
             </SelectTrigger>
             <SelectContent>
               {hours.map((item) => (
@@ -214,13 +202,13 @@ export function DateTimePicker({
             </SelectContent>
           </Select>
           <Select
-            value={String(parts.minute)}
             onValueChange={(nextValue) => {
               updateParts({ minute: Number.parseInt(nextValue, 10) })
             }}
+            value={String(parts.minute)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="分" />
+              <SelectValue placeholder='分' />
             </SelectTrigger>
             <SelectContent>
               {minutes.map((item) => (
@@ -231,11 +219,11 @@ export function DateTimePicker({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center justify-between">
-          <Button type="button" variant="ghost" size="sm" onClick={setNow}>
+        <div className='flex items-center justify-between'>
+          <Button onClick={setNow} size='sm' type='button' variant='ghost'>
             设为当前时间
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
+          <Button onClick={() => setOpen(false)} size='sm' type='button' variant='outline'>
             完成
           </Button>
         </div>

@@ -1,24 +1,23 @@
-"use client"
+'use client'
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useMutation, useQuery } from "convex/react"
-
-import type { Doc } from "@/convex/_generated/dataModel"
-import { api } from "@/convex/_generated/api"
-import { authClient } from "@/lib/auth-client"
+import { useMutation, useQuery } from 'convex/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { api } from '@/convex/_generated/api'
+import type { Doc } from '@/convex/_generated/dataModel'
+import { authClient } from '@/lib/auth-client'
 
 type UseCurrentLedgerResult = {
-  session: ReturnType<typeof authClient.useSession>["data"]
+  session: ReturnType<typeof authClient.useSession>['data']
   isSessionPending: boolean
-  ledgers: Doc<"ledgers">[] | undefined
-  currentLedger: Doc<"ledgers"> | undefined
+  ledgers: Doc<'ledgers'>[] | undefined
+  currentLedger: Doc<'ledgers'> | undefined
   ledgerError: string | null
 }
 
 export function useCurrentLedger(): UseCurrentLedgerResult {
   const { data: session, isPending: isSessionPending } = authClient.useSession()
   const ensureDefault = useMutation(api.ledgers.ensureDefault)
-  const ledgers = useQuery(api.ledgers.list, session ? {} : "skip")
+  const ledgers = useQuery(api.ledgers.list, session ? {} : 'skip')
   const [ledgerError, setLedgerError] = useState<string | null>(null)
   const requestedRef = useRef(false)
 
@@ -28,15 +27,14 @@ export function useCurrentLedger(): UseCurrentLedgerResult {
     }
 
     requestedRef.current = true
-    void ensureDefault({})
-      .catch((error: unknown) => {
-        requestedRef.current = false
-        if (error && typeof error === "object" && "message" in error) {
-          setLedgerError(String(error.message))
-          return
-        }
-        setLedgerError("初始化默认账本失败")
-      })
+    void ensureDefault({}).catch((error: unknown) => {
+      requestedRef.current = false
+      if (error && typeof error === 'object' && 'message' in error) {
+        setLedgerError(String(error.message))
+        return
+      }
+      setLedgerError('初始化默认账本失败')
+    })
   }, [ensureDefault, ledgers, session])
 
   const currentLedger = useMemo(() => {
@@ -47,10 +45,10 @@ export function useCurrentLedger(): UseCurrentLedgerResult {
   }, [ledgers])
 
   return {
-    session,
-    isSessionPending,
-    ledgers,
     currentLedger,
+    isSessionPending,
     ledgerError,
+    ledgers,
+    session,
   }
 }

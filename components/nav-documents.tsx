@@ -1,12 +1,6 @@
-"use client"
+'use client'
 
-import {
-  IconDots,
-  IconFolder,
-  IconShare3,
-  IconTrash,
-  type Icon,
-} from "@tabler/icons-react"
+import { type Icon, IconDots, IconFolder, IconShare3, IconTrash } from '@tabler/icons-react'
 
 import {
   DropdownMenu,
@@ -14,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from '@/components/ui/dropdown-menu'
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -23,7 +17,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
+} from '@/components/ui/sidebar'
 
 export function NavDocuments({
   items,
@@ -37,7 +31,7 @@ export function NavDocuments({
   const { isMobile } = useSidebar()
 
   return (
-    <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+    <SidebarGroup className='group-data-[collapsible=icon]:hidden'>
       <SidebarGroupLabel>文档</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
@@ -50,18 +44,15 @@ export function NavDocuments({
             </SidebarMenuButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuAction
-                  showOnHover
-                  className="data-[state=open]:bg-accent rounded-sm"
-                >
+                <SidebarMenuAction className='data-[state=open]:bg-accent rounded-sm' showOnHover>
                   <IconDots />
-                  <span className="sr-only">更多操作</span>
+                  <span className='sr-only'>更多操作</span>
                 </SidebarMenuAction>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className="w-24 rounded-lg"
-                side={isMobile ? "bottom" : "right"}
-                align={isMobile ? "end" : "start"}
+                align={isMobile ? 'end' : 'start'}
+                className='w-24 rounded-lg'
+                side={isMobile ? 'bottom' : 'right'}
               >
                 <DropdownMenuItem>
                   <IconFolder />
@@ -72,7 +63,7 @@ export function NavDocuments({
                   <span>分享</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive">
+                <DropdownMenuItem variant='destructive'>
                   <IconTrash />
                   <span>删除</span>
                 </DropdownMenuItem>
@@ -81,8 +72,8 @@ export function NavDocuments({
           </SidebarMenuItem>
         ))}
         <SidebarMenuItem>
-          <SidebarMenuButton className="text-sidebar-foreground/70">
-            <IconDots className="text-sidebar-foreground/70" />
+          <SidebarMenuButton className='text-sidebar-foreground/70'>
+            <IconDots className='text-sidebar-foreground/70' />
             <span>更多</span>
           </SidebarMenuButton>
         </SidebarMenuItem>

@@ -1,16 +1,12 @@
-"use client"
+'use client'
 
-import { useMemo } from "react"
-import { CalendarIcon } from "lucide-react"
+import { CalendarIcon } from 'lucide-react'
+import { useMemo } from 'react'
 
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
+import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
 
 type DatePickerProps = Readonly<{
   value: string
@@ -21,7 +17,7 @@ type DatePickerProps = Readonly<{
 }>
 
 function pad2(value: number) {
-  return String(value).padStart(2, "0")
+  return String(value).padStart(2, '0')
 }
 
 function parseDateValue(value: string): Date | null {
@@ -58,10 +54,10 @@ function toDateValue(date: Date) {
 }
 
 function formatDisplay(date: Date) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+  return new Intl.DateTimeFormat('zh-CN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
   }).format(date)
 }
 
@@ -69,7 +65,7 @@ export function DatePicker({
   value,
   onChange,
   disabled,
-  placeholder = "请选择日期",
+  placeholder = '请选择日期',
   className,
 }: DatePickerProps) {
   const selected = useMemo(() => parseDateValue(value) ?? undefined, [value])
@@ -79,29 +75,29 @@ export function DatePicker({
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          type="button"
-          variant="outline"
           className={cn(
-            "w-full justify-start text-left font-normal",
-            !selected && "text-muted-foreground",
+            'w-full justify-start text-left font-normal',
+            !selected && 'text-muted-foreground',
             className,
           )}
           disabled={disabled}
+          type='button'
+          variant='outline'
         >
-          <CalendarIcon className="mr-2 size-4" />
+          <CalendarIcon className='mr-2 size-4' />
           {selected ? formatDisplay(selected) : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto overflow-hidden p-0">
+      <PopoverContent align='start' className='w-auto overflow-hidden p-0'>
         <Calendar
-          mode="single"
-          selected={selected}
-          onSelect={(date) => {
-            onChange(date ? toDateValue(date) : "")
-          }}
-          captionLayout="dropdown"
-          startMonth={new Date(currentYear - 8, 0)}
+          captionLayout='dropdown'
           endMonth={new Date(currentYear + 8, 11)}
+          mode='single'
+          onSelect={(date) => {
+            onChange(date ? toDateValue(date) : '')
+          }}
+          selected={selected}
+          startMonth={new Date(currentYear - 8, 0)}
         />
       </PopoverContent>
     </Popover>

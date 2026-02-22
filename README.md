@@ -30,7 +30,9 @@ bun dev
 bun dev      # 启动开发环境
 bun build    # 构建生产版本
 bun start    # 启动生产服务
-bun lint     # 运行 ESLint
+bun lint     # 运行 Biome 检查
+bun lint:fix # 自动修复 Biome 问题
+bun format   # 运行 Biome 格式化
 ```
 
 ## 项目愿景

@@ -1,12 +1,12 @@
-import type { NextRequest } from "next/server"
-import { NextResponse } from "next/server"
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 
-import { createSignInPath } from "@/lib/auth-redirect"
+import { createSignInPath } from '@/lib/auth-redirect'
 
 function hasSessionTokenCookie(request: NextRequest) {
   return request.cookies
     .getAll()
-    .some((cookie) => cookie.name.toLowerCase().includes("session_token"))
+    .some((cookie) => cookie.name.toLowerCase().includes('session_token'))
 }
 
 export function proxy(request: NextRequest) {
@@ -21,10 +21,10 @@ export function proxy(request: NextRequest) {
 
 export const proxyConfig = {
   matcher: [
-    "/dashboard/:path*",
-    "/transactions/:path*",
-    "/accounts/:path*",
-    "/categories/:path*",
-    "/reports/:path*",
+    '/dashboard/:path*',
+    '/transactions/:path*',
+    '/accounts/:path*',
+    '/categories/:path*',
+    '/reports/:path*',
   ],
 }

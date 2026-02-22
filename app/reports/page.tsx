@@ -1,26 +1,20 @@
-"use client"
+'use client'
 
-import Link from "next/link"
-import { useMemo, useState } from "react"
-import { useQuery } from "convex/react"
-import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
+import { useQuery } from 'convex/react'
+import Link from 'next/link'
+import { useMemo, useState } from 'react'
+import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts'
 
-import { LedgerShell } from "@/components/ledger-shell"
-import { Button } from "@/components/ui/button"
+import { LedgerShell } from '@/components/ledger-shell'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
+  type ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart"
-import { Input } from "@/components/ui/input"
+} from '@/components/ui/chart'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -28,43 +22,43 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { api } from "@/convex/_generated/api"
-import { useAuthRedirect } from "@/hooks/use-auth-redirect"
-import { useCurrentLedger } from "@/hooks/use-current-ledger"
+} from '@/components/ui/table'
+import { api } from '@/convex/_generated/api'
+import { useAuthRedirect } from '@/hooks/use-auth-redirect'
+import { useCurrentLedger } from '@/hooks/use-current-ledger'
 
 const chartConfig = {
-  income: {
-    label: "收入",
-    color: "var(--chart-1)",
-  },
   expense: {
-    label: "支出",
-    color: "var(--chart-2)",
+    color: 'var(--chart-2)',
+    label: '支出',
+  },
+  income: {
+    color: 'var(--chart-1)',
+    label: '收入',
   },
 } satisfies ChartConfig
 
 function defaultMonthValue() {
   const now = new Date()
   const year = now.getUTCFullYear()
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0")
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0')
   return `${year}-${month}`
 }
 
 function parseMonth(monthValue: string) {
-  const [yearString, monthString] = monthValue.split("-")
+  const [yearString, monthString] = monthValue.split('-')
   const year = Number(yearString)
   const month = Number(monthString)
   if (!Number.isInteger(year) || !Number.isInteger(month)) {
     return null
   }
-  return { year, month }
+  return { month, year }
 }
 
 function toCurrency(minorUnits: number) {
-  return new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "CNY",
+  return new Intl.NumberFormat('zh-CN', {
+    currency: 'CNY',
+    style: 'currency',
   }).format(minorUnits / 100)
 }
 
@@ -73,13 +67,13 @@ function toPercent(ratio: number) {
 }
 
 function toDayLabel(bucket: string) {
-  const [, month, day] = bucket.split("-")
+  const [, month, day] = bucket.split('-')
   return `${month}/${day}`
 }
 
 export default function ReportsPage() {
   const { session, isSessionPending, currentLedger, ledgerError } = useCurrentLedger()
-  const { isRedirecting } = useAuthRedirect({ session, isSessionPending })
+  const { isRedirecting } = useAuthRedirect({ isSessionPending, session })
   const [monthValue, setMonthValue] = useState(defaultMonthValue)
 
   const monthInfo = useMemo(() => parseMonth(monthValue), [monthValue])
@@ -97,10 +91,10 @@ export default function ReportsPage() {
     currentLedger && monthInfo
       ? {
           ledgerId: currentLedger._id,
-          year: monthInfo.year,
           month: monthInfo.month,
+          year: monthInfo.year,
         }
-      : "skip",
+      : 'skip',
   )
 
   const expenseBreakdown = useQuery(
@@ -108,46 +102,46 @@ export default function ReportsPage() {
     currentLedger && monthInfo
       ? {
           ledgerId: currentLedger._id,
-          year: monthInfo.year,
           month: monthInfo.month,
-          type: "expense",
+          type: 'expense',
+          year: monthInfo.year,
         }
-      : "skip",
+      : 'skip',
   )
   const incomeBreakdown = useQuery(
     api.reports.categoryBreakdown,
     currentLedger && monthInfo
       ? {
           ledgerId: currentLedger._id,
-          year: monthInfo.year,
           month: monthInfo.month,
-          type: "income",
+          type: 'income',
+          year: monthInfo.year,
         }
-      : "skip",
+      : 'skip',
   )
   const trend = useQuery(
     api.reports.trend,
     currentLedger && trendRange
       ? {
-          ledgerId: currentLedger._id,
           from: trendRange.from,
+          granularity: 'day',
+          ledgerId: currentLedger._id,
           to: trendRange.to,
-          granularity: "day",
         }
-      : "skip",
+      : 'skip',
   )
 
   const trendData = (trend ?? []).map((item) => ({
     bucket: item.bucket,
-    income: item.income / 100,
     expense: item.expense / 100,
+    income: item.income / 100,
   }))
 
   if (isSessionPending || isRedirecting) {
     return (
-      <LedgerShell title="报表分析">
-        <div className="px-4 text-sm text-muted-foreground lg:px-6">
-          {isSessionPending ? "正在加载会话..." : "正在跳转到登录页..."}
+      <LedgerShell title='报表分析'>
+        <div className='px-4 text-sm text-muted-foreground lg:px-6'>
+          {isSessionPending ? '正在加载会话...' : '正在跳转到登录页...'}
         </div>
       </LedgerShell>
     )
@@ -155,8 +149,8 @@ export default function ReportsPage() {
 
   if (ledgerError) {
     return (
-      <LedgerShell title="报表分析">
-        <div className="px-4 lg:px-6">
+      <LedgerShell title='报表分析'>
+        <div className='px-4 lg:px-6'>
           <Card>
             <CardHeader>
               <CardTitle>账本初始化失败</CardTitle>
@@ -170,35 +164,35 @@ export default function ReportsPage() {
 
   return (
     <LedgerShell
-      title="报表分析"
       headerAction={
-        <Button asChild size="sm">
-          <Link href="/transactions/new">记一笔</Link>
+        <Button asChild size='sm'>
+          <Link href='/transactions/new'>记一笔</Link>
         </Button>
       }
+      title='报表分析'
     >
-      <div className="space-y-4 px-4 lg:space-y-6 lg:px-6">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]">
+      <div className='space-y-4 px-4 lg:space-y-6 lg:px-6'>
+        <div className='grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]'>
           <Card>
             <CardHeader>
               <CardTitle>报表月份</CardTitle>
               <CardDescription>选择月份查看该月收入、支出与分类占比。</CardDescription>
             </CardHeader>
-            <CardContent className="max-w-xs space-y-2">
+            <CardContent className='max-w-xs space-y-2'>
               <Input
-                type="month"
-                value={monthValue}
                 onChange={(event) => {
                   setMonthValue(event.target.value)
                 }}
+                type='month'
+                value={monthValue}
               />
               {!monthInfo ? (
-                <p className="text-xs text-destructive">月份格式无效，请重新选择。</p>
+                <p className='text-xs text-destructive'>月份格式无效，请重新选择。</p>
               ) : null}
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
             <Card>
               <CardHeader>
                 <CardDescription>本月收入</CardDescription>
@@ -233,33 +227,38 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             {trendData.length === 0 ? (
-              <div className="text-sm text-muted-foreground">暂无趋势数据。</div>
+              <div className='text-sm text-muted-foreground'>暂无趋势数据。</div>
             ) : (
-              <ChartContainer config={chartConfig} className="h-[280px] w-full">
+              <ChartContainer className='h-[280px] w-full' config={chartConfig}>
                 <BarChart data={trendData}>
                   <CartesianGrid vertical={false} />
-                  <XAxis dataKey="bucket" tickFormatter={toDayLabel} tickLine={false} axisLine={false} />
+                  <XAxis
+                    axisLine={false}
+                    dataKey='bucket'
+                    tickFormatter={toDayLabel}
+                    tickLine={false}
+                  />
                   <ChartTooltip
                     content={
                       <ChartTooltipContent
-                        indicator="dot"
-                        labelFormatter={(value) => value}
                         formatter={(value, name) => [
                           toCurrency(Number(value) * 100),
-                          name === "income" ? "收入" : "支出",
+                          name === 'income' ? '收入' : '支出',
                         ]}
+                        indicator='dot'
+                        labelFormatter={(value) => value}
                       />
                     }
                   />
-                  <Bar dataKey="income" fill="var(--color-income)" radius={4} />
-                  <Bar dataKey="expense" fill="var(--color-expense)" radius={4} />
+                  <Bar dataKey='income' fill='var(--color-income)' radius={4} />
+                  <Bar dataKey='expense' fill='var(--color-expense)' radius={4} />
                 </BarChart>
               </ChartContainer>
             )}
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className='grid grid-cols-1 gap-4 xl:grid-cols-2'>
           <Card>
             <CardHeader>
               <CardTitle>支出分类占比</CardTitle>
@@ -267,22 +266,22 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               {!expenseBreakdown || expenseBreakdown.length === 0 ? (
-                <div className="text-sm text-muted-foreground">暂无支出数据。</div>
+                <div className='text-sm text-muted-foreground'>暂无支出数据。</div>
               ) : (
-                <Table className="min-w-[520px]">
+                <Table className='min-w-[520px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead>分类</TableHead>
-                      <TableHead className="text-right">金额</TableHead>
-                      <TableHead className="text-right">占比</TableHead>
+                      <TableHead className='text-right'>金额</TableHead>
+                      <TableHead className='text-right'>占比</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {expenseBreakdown.map((item) => (
                       <TableRow key={item.categoryId}>
                         <TableCell>{item.categoryName}</TableCell>
-                        <TableCell className="text-right">{toCurrency(item.amount)}</TableCell>
-                        <TableCell className="text-right">{toPercent(item.ratio)}</TableCell>
+                        <TableCell className='text-right'>{toCurrency(item.amount)}</TableCell>
+                        <TableCell className='text-right'>{toPercent(item.ratio)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -298,22 +297,22 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               {!incomeBreakdown || incomeBreakdown.length === 0 ? (
-                <div className="text-sm text-muted-foreground">暂无收入数据。</div>
+                <div className='text-sm text-muted-foreground'>暂无收入数据。</div>
               ) : (
-                <Table className="min-w-[520px]">
+                <Table className='min-w-[520px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead>分类</TableHead>
-                      <TableHead className="text-right">金额</TableHead>
-                      <TableHead className="text-right">占比</TableHead>
+                      <TableHead className='text-right'>金额</TableHead>
+                      <TableHead className='text-right'>占比</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {incomeBreakdown.map((item) => (
                       <TableRow key={item.categoryId}>
                         <TableCell>{item.categoryName}</TableCell>
-                        <TableCell className="text-right">{toCurrency(item.amount)}</TableCell>
-                        <TableCell className="text-right">{toPercent(item.ratio)}</TableCell>
+                        <TableCell className='text-right'>{toCurrency(item.amount)}</TableCell>
+                        <TableCell className='text-right'>{toPercent(item.ratio)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

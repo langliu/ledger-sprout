@@ -1,36 +1,36 @@
-import { ConvexError } from "convex/values";
+import { ConvexError } from 'convex/values'
 
 export function assertIntegerAmount(value: number, field: string) {
   if (!Number.isInteger(value)) {
-    throw new ConvexError(`${field} must be an integer`);
+    throw new ConvexError(`${field} must be an integer`)
   }
 }
 
 export function assertPositiveIntegerAmount(value: number, field: string) {
-  assertIntegerAmount(value, field);
+  assertIntegerAmount(value, field)
   if (value <= 0) {
-    throw new ConvexError(`${field} must be greater than 0`);
+    throw new ConvexError(`${field} must be greater than 0`)
   }
 }
 
 export function assertTimestamp(value: number, field: string) {
   if (!Number.isFinite(value) || value <= 0) {
-    throw new ConvexError(`${field} must be a valid timestamp`);
+    throw new ConvexError(`${field} must be a valid timestamp`)
   }
 }
 
 export function normalizeRequiredName(value: string, field: string) {
-  const trimmed = value.trim();
+  const trimmed = value.trim()
   if (trimmed.length === 0) {
-    throw new ConvexError(`${field} cannot be empty`);
+    throw new ConvexError(`${field} cannot be empty`)
   }
-  return trimmed;
+  return trimmed
 }
 
 export function normalizeOptionalNote(value: string | null | undefined) {
   if (value === undefined || value === null) {
-    return undefined;
+    return undefined
   }
-  const trimmed = value.trim();
-  return trimmed.length === 0 ? undefined : trimmed;
+  const trimmed = value.trim()
+  return trimmed.length === 0 ? undefined : trimmed
 }
