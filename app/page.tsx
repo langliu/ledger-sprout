@@ -72,13 +72,13 @@ const processSteps = [
 ] as const
 
 const sparklineBars = [
-  { height: 38, id: 'bar-mon' },
-  { height: 54, id: 'bar-tue' },
-  { height: 46, id: 'bar-wed' },
-  { height: 70, id: 'bar-thu' },
-  { height: 57, id: 'bar-fri' },
-  { height: 63, id: 'bar-sat' },
-  { height: 82, id: 'bar-sun' },
+  { day: '一', height: 38, id: 'bar-mon' },
+  { day: '二', height: 54, id: 'bar-tue' },
+  { day: '三', height: 46, id: 'bar-wed' },
+  { day: '四', height: 70, id: 'bar-thu' },
+  { day: '五', height: 57, id: 'bar-fri' },
+  { day: '六', height: 63, id: 'bar-sat' },
+  { day: '日', height: 82, id: 'bar-sun' },
 ] as const
 
 export default function HomePage() {
@@ -101,7 +101,7 @@ export default function HomePage() {
           </Button>
         </header>
 
-        <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-8'>
+        <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-10'>
           <div>
             <Badge
               className='animate-in fade-in-0 slide-in-from-bottom-3 border-amber-700/20 bg-amber-50 text-amber-800 duration-700'
@@ -110,7 +110,7 @@ export default function HomePage() {
               温柔记账体验 · Next.js 16 + Convex
             </Badge>
             <h1
-              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-4 text-4xl leading-tight font-semibold tracking-tight text-zinc-900 duration-700 sm:text-5xl lg:text-6xl'
+              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-4 max-w-4xl text-4xl leading-[1.02] font-semibold tracking-tight text-zinc-900 duration-700 text-balance sm:text-5xl lg:text-[4.5rem]'
               style={{ animationDelay: '90ms', animationFillMode: 'both' }}
             >
               像照料一株小苗那样
@@ -141,17 +141,35 @@ export default function HomePage() {
                 <Link href='/dashboard'>去看看我的账本</Link>
               </Button>
             </div>
+            <div
+              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-5 flex flex-wrap items-center gap-2 duration-700'
+              style={{ animationDelay: '320ms', animationFillMode: 'both' }}
+            >
+              {['默认账本自动创建', '按天回溯流水', '月度报表复盘'].map((item) => (
+                <span
+                  className='rounded-full border border-amber-200/70 bg-white/70 px-3 py-1 text-xs text-zinc-700'
+                  key={item}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
 
           <Card
-            className='animate-in fade-in-0 slide-in-from-right-6 border-amber-900/10 bg-white/80 pt-0 backdrop-blur duration-700'
+            className='animate-in fade-in-0 slide-in-from-right-6 border-amber-900/10 bg-white/85 pt-0 shadow-sm backdrop-blur duration-700'
             style={{ animationDelay: '220ms', animationFillMode: 'both' }}
           >
             <CardHeader className='border-b border-amber-900/8 py-4'>
-              <CardTitle className='flex items-center gap-2 text-base'>
-                <Sparkles className='size-4 text-amber-500' />
-                这个月的你
-              </CardTitle>
+              <div className='flex items-start justify-between gap-3'>
+                <CardTitle className='flex items-center gap-2 text-base'>
+                  <Sparkles className='size-4 text-amber-500' />
+                  这个月的你
+                </CardTitle>
+                <span className='rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700'>
+                  结余 +¥3,920
+                </span>
+              </div>
               <CardDescription>收入和支出在慢慢变清晰</CardDescription>
             </CardHeader>
             <CardContent className='space-y-5 py-5'>
@@ -172,17 +190,21 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className='grid grid-cols-3 gap-2'>
-                {sparklineBars.map((bar) => (
-                  <div className='space-y-1' key={bar.id}>
-                    <div className='h-16 rounded-lg bg-zinc-100 px-2 pt-2'>
-                      <div
-                        className='rounded-sm bg-[linear-gradient(180deg,#b56a2d_0%,#e6a35f_100%)]'
-                        style={{ height: `${bar.height}%` }}
-                      />
+              <div className='rounded-xl border border-amber-100/80 bg-amber-50/50 p-3'>
+                <p className='text-[11px] text-zinc-500'>近 7 天支出趋势</p>
+                <div className='mt-3 grid grid-cols-7 gap-1.5'>
+                  {sparklineBars.map((bar) => (
+                    <div className='flex flex-col items-center gap-1' key={bar.id}>
+                      <div className='flex h-16 w-full items-end rounded-md bg-white/80 p-1'>
+                        <div
+                          className='w-full rounded-[3px] bg-[linear-gradient(180deg,#b56a2d_0%,#e6a35f_100%)]'
+                          style={{ height: `${bar.height}%` }}
+                        />
+                      </div>
+                      <span className='text-[10px] text-zinc-500'>{bar.day}</span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </CardContent>
           </Card>
