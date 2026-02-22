@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState, type FormEvent } from "react"
+import { useMemo, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 
 import type { Doc, Id } from "@/convex/_generated/dataModel"
@@ -15,6 +15,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -36,6 +45,8 @@ import { useAuthRedirect } from "@/hooks/use-auth-redirect"
 import { useCurrentLedger } from "@/hooks/use-current-ledger"
 
 type AccountType = "cash" | "bank" | "credit" | "wallet"
+type AccountStatus = "active" | "inactive"
+type AccountDrawerMode = "create" | "edit" | "adjust" | null
 
 const ACCOUNT_TYPE_OPTIONS: Array<{ value: AccountType; label: string }> = [
   { value: "cash", label: "现金" },
@@ -94,22 +105,27 @@ export default function AccountsPage() {
     currentLedger ? { ledgerId: currentLedger._id, limit: 20 } : "skip",
   )
 
-  const [name, setName] = useState("")
-  const [type, setType] = useState<AccountType>("cash")
-  const [initialBalance, setInitialBalance] = useState("0")
+  const [drawerMode, setDrawerMode] = useState<AccountDrawerMode>(null)
+  const [drawerError, setDrawerError] = useState<string | null>(null)
+
+  const [createName, setCreateName] = useState("")
+  const [createType, setCreateType] = useState<AccountType>("cash")
+  const [createInitialBalance, setCreateInitialBalance] = useState("0")
   const [isCreating, setIsCreating] = useState(false)
 
   const [editingId, setEditingId] = useState<Id<"accounts"> | null>(null)
   const [editingName, setEditingName] = useState("")
   const [editingType, setEditingType] = useState<AccountType>("cash")
-  const [editingStatus, setEditingStatus] = useState<"active" | "inactive">("active")
+  const [editingStatus, setEditingStatus] = useState<AccountStatus>("active")
   const [isSavingEdit, setIsSavingEdit] = useState(false)
 
-  const [adjustAccountId, setAdjustAccountId] = useState<Id<"accounts"> | "">("")
+  const [adjustAccountId, setAdjustAccountId] = useState<Id<"accounts"> | null>(null)
   const [adjustDelta, setAdjustDelta] = useState("")
   const [adjustReason, setAdjustReason] = useState("")
   const [isAdjusting, setIsAdjusting] = useState(false)
 
+  const [filterType, setFilterType] = useState<"all" | AccountType>("all")
+  const [filterStatus, setFilterStatus] = useState<"all" | AccountStatus>("all")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const activeCount = useMemo(() => {
@@ -121,39 +137,83 @@ export default function AccountsPage() {
   const accountMap = useMemo(() => {
     return new Map((accounts ?? []).map((account) => [account._id, account]))
   }, [accounts])
+  const filteredAccounts = useMemo(() => {
+    return (accounts ?? []).filter((account) => {
+      const passType = filterType === "all" || account.type === filterType
+      const passStatus = filterStatus === "all" || account.status === filterStatus
+      return passType && passStatus
+    })
+  }, [accounts, filterStatus, filterType])
+  const activeFilterCount = useMemo(() => {
+    return [filterType !== "all", filterStatus !== "all"].filter(Boolean).length
+  }, [filterStatus, filterType])
 
-  useEffect(() => {
-    if (!accounts || accounts.length === 0) {
-      return
-    }
-    if (!adjustAccountId || !accounts.some((account) => account._id === adjustAccountId)) {
-      setAdjustAccountId(accounts[0]._id)
-    }
-  }, [accounts, adjustAccountId])
+  const resetCreateState = () => {
+    setCreateName("")
+    setCreateType("cash")
+    setCreateInitialBalance("0")
+  }
+
+  const resetEditState = () => {
+    setEditingId(null)
+    setEditingName("")
+    setEditingType("cash")
+    setEditingStatus("active")
+  }
+
+  const resetAdjustState = () => {
+    setAdjustAccountId(null)
+    setAdjustDelta("")
+    setAdjustReason("")
+  }
+
+  const closeDrawer = () => {
+    setDrawerMode(null)
+    setDrawerError(null)
+    resetCreateState()
+    resetEditState()
+    resetAdjustState()
+  }
+
+  const openCreateDrawer = () => {
+    setDrawerError(null)
+    resetCreateState()
+    setDrawerMode("create")
+  }
 
   const startEdit = (account: Doc<"accounts">) => {
     setEditingId(account._id)
     setEditingName(account.name)
     setEditingType(account.type)
     setEditingStatus(account.status)
+    setDrawerError(null)
     setErrorMessage(null)
+    setDrawerMode("edit")
   }
 
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
+  const startAdjust = (account: Doc<"accounts">) => {
+    setAdjustAccountId(account._id)
+    setAdjustDelta("")
+    setAdjustReason("")
+    setDrawerError(null)
     setErrorMessage(null)
+    setDrawerMode("adjust")
+  }
+
+  const handleCreate = async () => {
+    setDrawerError(null)
     if (!currentLedger) {
-      setErrorMessage("当前账本不可用，请稍后重试。")
+      setDrawerError("当前账本不可用，请稍后重试。")
       return
     }
 
-    const minorUnits = toMinorUnits(initialBalance)
+    const minorUnits = toMinorUnits(createInitialBalance)
     if (minorUnits === null) {
-      setErrorMessage("初始余额格式不正确。")
+      setDrawerError("初始余额格式不正确。")
       return
     }
-    if (name.trim().length === 0) {
-      setErrorMessage("账户名称不能为空。")
+    if (createName.trim().length === 0) {
+      setDrawerError("账户名称不能为空。")
       return
     }
 
@@ -161,18 +221,16 @@ export default function AccountsPage() {
     try {
       await createAccount({
         ledgerId: currentLedger._id,
-        name: name.trim(),
-        type,
+        name: createName.trim(),
+        type: createType,
         initialBalance: minorUnits,
       })
-      setName("")
-      setType("cash")
-      setInitialBalance("0")
+      closeDrawer()
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
-        setErrorMessage(String(error.message))
+        setDrawerError(String(error.message))
       } else {
-        setErrorMessage("创建账户失败，请稍后重试。")
+        setDrawerError("创建账户失败，请稍后重试。")
       }
     } finally {
       setIsCreating(false)
@@ -184,11 +242,11 @@ export default function AccountsPage() {
       return
     }
     if (editingName.trim().length === 0) {
-      setErrorMessage("账户名称不能为空。")
+      setDrawerError("账户名称不能为空。")
       return
     }
 
-    setErrorMessage(null)
+    setDrawerError(null)
     setIsSavingEdit(true)
     try {
       await updateAccount({
@@ -197,29 +255,28 @@ export default function AccountsPage() {
         type: editingType,
         status: editingStatus,
       })
-      setEditingId(null)
+      closeDrawer()
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
-        setErrorMessage(String(error.message))
+        setDrawerError(String(error.message))
       } else {
-        setErrorMessage("保存账户失败，请稍后重试。")
+        setDrawerError("保存账户失败，请稍后重试。")
       }
     } finally {
       setIsSavingEdit(false)
     }
   }
 
-  const handleAdjustBalance = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setErrorMessage(null)
+  const handleAdjustBalance = async () => {
+    setDrawerError(null)
 
     if (!adjustAccountId) {
-      setErrorMessage("请选择账户。")
+      setDrawerError("请选择账户。")
       return
     }
     const delta = toMinorUnits(adjustDelta)
     if (delta === null || delta === 0) {
-      setErrorMessage("调整金额格式不正确，且不能为 0。")
+      setDrawerError("调整金额格式不正确，且不能为 0。")
       return
     }
 
@@ -230,13 +287,12 @@ export default function AccountsPage() {
         delta,
         ...(adjustReason.trim().length > 0 ? { reason: adjustReason.trim() } : {}),
       })
-      setAdjustDelta("")
-      setAdjustReason("")
+      closeDrawer()
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
-        setErrorMessage(String(error.message))
+        setDrawerError(String(error.message))
       } else {
-        setErrorMessage("余额调整失败，请稍后重试。")
+        setDrawerError("余额调整失败，请稍后重试。")
       }
     } finally {
       setIsAdjusting(false)
@@ -288,9 +344,14 @@ export default function AccountsPage() {
     <LedgerShell
       title="账户管理"
       headerAction={
-        <Button asChild size="sm">
-          <Link href="/transactions/new">记一笔</Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={openCreateDrawer}>
+            新增账户
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/transactions/new">记一笔</Link>
+          </Button>
+        </div>
       }
     >
       <div className="space-y-4 px-4 lg:space-y-6 lg:px-6">
@@ -321,199 +382,80 @@ export default function AccountsPage() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>新增账户</CardTitle>
-              <CardDescription>初始余额可为负数（如信用卡欠款）。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleCreate}>
-                <div className="space-y-2">
-                  <Label htmlFor="name">名称</Label>
-                  <Input
-                    id="name"
-                    placeholder="例如：招商银行卡"
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.target.value)
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="type">类型</Label>
-                  <Select value={type} onValueChange={(value) => setType(value as AccountType)}>
-                    <SelectTrigger id="type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ACCOUNT_TYPE_OPTIONS.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="initialBalance">初始余额（元）</Label>
-                  <Input
-                    id="initialBalance"
-                    value={initialBalance}
-                    onChange={(event) => {
-                      setInitialBalance(event.target.value)
-                    }}
-                  />
-                </div>
-                <Button type="submit" disabled={isCreating}>
-                  {isCreating ? "创建中..." : "创建账户"}
+        <Card>
+          <CardHeader>
+            <CardTitle>账户筛选</CardTitle>
+            <CardDescription>
+              可按类型与状态过滤。
+              {activeFilterCount > 0 ? ` · ${activeFilterCount} 个筛选条件生效` : ""}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">类型过滤</p>
+                <Select value={filterType} onValueChange={(value) => setFilterType(value as "all" | AccountType)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    {ACCOUNT_TYPE_OPTIONS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">状态过滤</p>
+                <Select
+                  value={filterStatus}
+                  onValueChange={(value) => setFilterStatus(value as "all" | AccountStatus)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="active">启用</SelectItem>
+                    <SelectItem value="inactive">停用</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end md:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFilterType("all")
+                    setFilterStatus("all")
+                  }}
+                >
+                  重置筛选
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>编辑账户</CardTitle>
-              <CardDescription>选择下方账户后可编辑名称、类型和状态。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {editingId ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="editingName">名称</Label>
-                    <Input
-                      id="editingName"
-                      value={editingName}
-                      onChange={(event) => {
-                        setEditingName(event.target.value)
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="editingType">类型</Label>
-                    <Select
-                      value={editingType}
-                      onValueChange={(value) => setEditingType(value as AccountType)}
-                    >
-                      <SelectTrigger id="editingType">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ACCOUNT_TYPE_OPTIONS.map((item) => (
-                          <SelectItem key={item.value} value={item.value}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="editingStatus">状态</Label>
-                    <Select
-                      value={editingStatus}
-                      onValueChange={(value) => setEditingStatus(value as "active" | "inactive")}
-                    >
-                      <SelectTrigger id="editingStatus">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">启用</SelectItem>
-                        <SelectItem value="inactive">停用</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      disabled={isSavingEdit}
-                      onClick={() => void handleSaveEdit()}
-                    >
-                      {isSavingEdit ? "保存中..." : "保存修改"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingId(null)
-                      }}
-                    >
-                      取消
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  请选择一个账户进入编辑模式。
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>余额调整</CardTitle>
-              <CardDescription>输入正数为增加，负数为减少，例如 `-100.00`。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleAdjustBalance}>
-                <div className="space-y-2">
-                  <Label htmlFor="adjustAccount">账户</Label>
-                  <Select
-                    value={adjustAccountId || undefined}
-                    onValueChange={(value) => setAdjustAccountId(value as Id<"accounts">)}
-                  >
-                    <SelectTrigger id="adjustAccount">
-                      <SelectValue placeholder="请选择账户" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(accounts ?? []).map((account) => (
-                        <SelectItem key={account._id} value={account._id}>
-                          {account.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="adjustDelta">调整金额（元）</Label>
-                  <Input
-                    id="adjustDelta"
-                    placeholder="例如：100.00 或 -35.50"
-                    value={adjustDelta}
-                    onChange={(event) => {
-                      setAdjustDelta(event.target.value)
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="adjustReason">原因（可选）</Label>
-                  <Input
-                    id="adjustReason"
-                    placeholder="例如：月初对账"
-                    value={adjustReason}
-                    onChange={(event) => {
-                      setAdjustReason(event.target.value)
-                    }}
-                  />
-                </div>
-                <Button type="submit" disabled={isAdjusting}>
-                  {isAdjusting ? "调整中..." : "确认调整"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {activeFilterCount > 0 ? `已启用 ${activeFilterCount} 个筛选条件` : "当前未启用筛选条件"}
+            </p>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <Card>
             <CardHeader>
               <CardTitle>账户列表</CardTitle>
-              <CardDescription>可直接启停账户，编辑请点击“编辑”。</CardDescription>
+              <CardDescription>
+                当前展示 {filteredAccounts.length} 个账户。
+                {activeFilterCount > 0 ? ` · ${activeFilterCount} 个筛选条件生效` : ""}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {!accounts || accounts.length === 0 ? (
-                <div className="text-sm text-muted-foreground">暂无账户，请先创建一个账户。</div>
+              {filteredAccounts.length === 0 ? (
+                <div className="text-sm text-muted-foreground">暂无符合条件的账户。</div>
               ) : (
                 <Table className="min-w-[760px]">
                   <TableHeader>
@@ -522,11 +464,11 @@ export default function AccountsPage() {
                       <TableHead>类型</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead className="text-right">当前余额</TableHead>
-                      <TableHead className="w-48 text-right">操作</TableHead>
+                      <TableHead className="w-56 text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {accounts.map((account) => (
+                    {filteredAccounts.map((account) => (
                       <TableRow key={account._id}>
                         <TableCell>{account.name}</TableCell>
                         <TableCell>{getTypeLabel(account.type)}</TableCell>
@@ -534,6 +476,14 @@ export default function AccountsPage() {
                         <TableCell className="text-right">{toCurrency(account.currentBalance)}</TableCell>
                         <TableCell className="text-right">
                           <div className="inline-flex flex-wrap justify-end gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => startAdjust(account)}
+                            >
+                              调整余额
+                            </Button>
                             <Button
                               type="button"
                               size="sm"
@@ -585,9 +535,7 @@ export default function AccountsPage() {
                       <TableRow key={item._id}>
                         <TableCell>{toDateTimeLabel(item.createdAt)}</TableCell>
                         <TableCell>{accountMap.get(item.accountId)?.name ?? "未知账户"}</TableCell>
-                        <TableCell className="text-right font-medium">
-                          {toSignedCurrency(item.delta)}
-                        </TableCell>
+                        <TableCell className="text-right font-medium">{toSignedCurrency(item.delta)}</TableCell>
                         <TableCell>{item.reason ?? "-"}</TableCell>
                       </TableRow>
                     ))}
@@ -597,6 +545,190 @@ export default function AccountsPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Drawer
+          open={drawerMode !== null}
+          direction="right"
+          onOpenChange={(open) => {
+            if (!open) {
+              closeDrawer()
+            }
+          }}
+        >
+          <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md data-[vaul-drawer-direction=right]:lg:max-w-xl">
+            <DrawerHeader>
+              <DrawerTitle>
+                {drawerMode === "create" ? "新增账户" : drawerMode === "edit" ? "编辑账户" : "调整余额"}
+              </DrawerTitle>
+              <DrawerDescription>
+                {drawerMode === "create"
+                  ? "创建账户后可用于记账与余额调整。"
+                  : drawerMode === "edit"
+                    ? "可修改账户名称、类型和启停状态。"
+                    : "输入正数为增加，负数为减少，例如 -100.00。"}
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="space-y-4 overflow-y-auto px-4 pb-2">
+              {drawerError ? <p className="text-sm text-destructive">{drawerError}</p> : null}
+
+              {drawerMode === "create" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="createAccountName">名称</Label>
+                    <Input
+                      id="createAccountName"
+                      placeholder="例如：招商银行卡"
+                      value={createName}
+                      onChange={(event) => {
+                        setCreateName(event.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="createAccountType">类型</Label>
+                    <Select
+                      value={createType}
+                      onValueChange={(value) => setCreateType(value as AccountType)}
+                    >
+                      <SelectTrigger id="createAccountType" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACCOUNT_TYPE_OPTIONS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="createInitialBalance">初始余额（元）</Label>
+                    <Input
+                      id="createInitialBalance"
+                      value={createInitialBalance}
+                      onChange={(event) => {
+                        setCreateInitialBalance(event.target.value)
+                      }}
+                    />
+                  </div>
+                </>
+              ) : null}
+
+              {drawerMode === "edit" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="editingAccountName">名称</Label>
+                    <Input
+                      id="editingAccountName"
+                      value={editingName}
+                      onChange={(event) => {
+                        setEditingName(event.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editingAccountType">类型</Label>
+                    <Select
+                      value={editingType}
+                      onValueChange={(value) => setEditingType(value as AccountType)}
+                    >
+                      <SelectTrigger id="editingAccountType" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACCOUNT_TYPE_OPTIONS.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editingAccountStatus">状态</Label>
+                    <Select
+                      value={editingStatus}
+                      onValueChange={(value) => setEditingStatus(value as AccountStatus)}
+                    >
+                      <SelectTrigger id="editingAccountStatus" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">启用</SelectItem>
+                        <SelectItem value="inactive">停用</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              ) : null}
+
+              {drawerMode === "adjust" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="adjustAccountName">账户</Label>
+                    <Input
+                      id="adjustAccountName"
+                      value={adjustAccountId ? (accountMap.get(adjustAccountId)?.name ?? "未知账户") : ""}
+                      readOnly
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="adjustDelta">调整金额（元）</Label>
+                    <Input
+                      id="adjustDelta"
+                      placeholder="例如：100.00 或 -35.50"
+                      value={adjustDelta}
+                      onChange={(event) => {
+                        setAdjustDelta(event.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="adjustReason">原因（可选）</Label>
+                    <textarea
+                      id="adjustReason"
+                      className="border-input focus-visible:border-ring focus-visible:ring-ring/50 min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+                      placeholder="例如：月初对账"
+                      value={adjustReason}
+                      onChange={(event) => {
+                        setAdjustReason(event.target.value)
+                      }}
+                    />
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <DrawerFooter className="sm:flex-row sm:justify-end">
+              {drawerMode === "create" ? (
+                <Button type="button" disabled={isCreating} onClick={() => void handleCreate()}>
+                  {isCreating ? "创建中..." : "创建账户"}
+                </Button>
+              ) : drawerMode === "edit" ? (
+                <Button
+                  type="button"
+                  disabled={isSavingEdit}
+                  onClick={() => void handleSaveEdit()}
+                >
+                  {isSavingEdit ? "保存中..." : "保存修改"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={isAdjusting || !adjustAccountId}
+                  onClick={() => void handleAdjustBalance()}
+                >
+                  {isAdjusting ? "调整中..." : "确认调整"}
+                </Button>
+              )}
+              <DrawerClose asChild>
+                <Button type="button" variant="outline" onClick={closeDrawer}>
+                  取消
+                </Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
       </div>
     </LedgerShell>
   )

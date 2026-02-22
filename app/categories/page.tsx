@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, type FormEvent } from "react"
+import { useMemo, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 
 import type { Doc, Id } from "@/convex/_generated/dataModel"
@@ -14,6 +14,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -37,6 +46,7 @@ import { useCurrentLedger } from "@/hooks/use-current-ledger"
 
 type CategoryType = "expense" | "income"
 type CategoryStatus = "active" | "inactive"
+type CategoryDrawerMode = "create" | "edit" | null
 
 function getTypeLabel(type: CategoryType) {
   return type === "expense" ? "支出" : "收入"
@@ -53,13 +63,18 @@ export default function CategoriesPage() {
     currentLedger ? { ledgerId: currentLedger._id } : "skip",
   )
 
-  const [name, setName] = useState("")
-  const [type, setType] = useState<CategoryType>("expense")
+  const [drawerMode, setDrawerMode] = useState<CategoryDrawerMode>(null)
+  const [drawerError, setDrawerError] = useState<string | null>(null)
+
+  const [createName, setCreateName] = useState("")
+  const [createType, setCreateType] = useState<CategoryType>("expense")
   const [isCreating, setIsCreating] = useState(false)
+
   const [editingId, setEditingId] = useState<Id<"categories"> | null>(null)
   const [editingName, setEditingName] = useState("")
   const [editingStatus, setEditingStatus] = useState<CategoryStatus>("active")
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+
   const [filterType, setFilterType] = useState<"all" | CategoryType>("all")
   const [filterStatus, setFilterStatus] = useState<"all" | CategoryStatus>("all")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -72,6 +87,7 @@ export default function CategoriesPage() {
       return passType && passStatus
     })
   }, [categories, filterStatus, filterType])
+
   const totalCategories = categories?.length ?? 0
   const activeCategories = useMemo(() => {
     return (categories ?? []).filter((category) => category.status === "active").length
@@ -81,22 +97,47 @@ export default function CategoriesPage() {
     return [filterType !== "all", filterStatus !== "all"].filter(Boolean).length
   }, [filterStatus, filterType])
 
+  const resetCreateState = () => {
+    setCreateName("")
+    setCreateType("expense")
+  }
+
+  const resetEditState = () => {
+    setEditingId(null)
+    setEditingName("")
+    setEditingStatus("active")
+  }
+
+  const closeDrawer = () => {
+    setDrawerMode(null)
+    setDrawerError(null)
+    resetCreateState()
+    resetEditState()
+  }
+
+  const openCreateDrawer = () => {
+    setDrawerError(null)
+    resetCreateState()
+    setDrawerMode("create")
+  }
+
   const startEdit = (category: Doc<"categories">) => {
     setEditingId(category._id)
     setEditingName(category.name)
     setEditingStatus(category.status)
+    setDrawerError(null)
     setErrorMessage(null)
+    setDrawerMode("edit")
   }
 
-  const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setErrorMessage(null)
+  const handleCreate = async () => {
+    setDrawerError(null)
     if (!currentLedger) {
-      setErrorMessage("当前账本不可用，请稍后重试。")
+      setDrawerError("当前账本不可用，请稍后重试。")
       return
     }
-    if (name.trim().length === 0) {
-      setErrorMessage("分类名称不能为空。")
+    if (createName.trim().length === 0) {
+      setDrawerError("分类名称不能为空。")
       return
     }
 
@@ -104,15 +145,15 @@ export default function CategoriesPage() {
     try {
       await createCategory({
         ledgerId: currentLedger._id,
-        name: name.trim(),
-        type,
+        name: createName.trim(),
+        type: createType,
       })
-      setName("")
+      closeDrawer()
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
-        setErrorMessage(String(error.message))
+        setDrawerError(String(error.message))
       } else {
-        setErrorMessage("创建分类失败，请稍后重试。")
+        setDrawerError("创建分类失败，请稍后重试。")
       }
     } finally {
       setIsCreating(false)
@@ -124,11 +165,11 @@ export default function CategoriesPage() {
       return
     }
     if (editingName.trim().length === 0) {
-      setErrorMessage("分类名称不能为空。")
+      setDrawerError("分类名称不能为空。")
       return
     }
 
-    setErrorMessage(null)
+    setDrawerError(null)
     setIsSavingEdit(true)
     try {
       await updateCategory({
@@ -136,12 +177,12 @@ export default function CategoriesPage() {
         name: editingName.trim(),
         status: editingStatus,
       })
-      setEditingId(null)
+      closeDrawer()
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
-        setErrorMessage(String(error.message))
+        setDrawerError(String(error.message))
       } else {
-        setErrorMessage("保存分类失败，请稍后重试。")
+        setDrawerError("保存分类失败，请稍后重试。")
       }
     } finally {
       setIsSavingEdit(false)
@@ -193,9 +234,14 @@ export default function CategoriesPage() {
     <LedgerShell
       title="分类管理"
       headerAction={
-        <Button asChild size="sm">
-          <Link href="/transactions/new">去记账</Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={openCreateDrawer}>
+            新增分类
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/transactions/new">去记账</Link>
+          </Button>
+        </div>
       }
     >
       <div className="space-y-4 px-4 lg:space-y-6 lg:px-6">
@@ -226,119 +272,20 @@ export default function CategoriesPage() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>新增分类</CardTitle>
-              <CardDescription>创建后可用于新增收入或支出流水。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleCreate}>
-                <div className="space-y-2">
-                  <Label htmlFor="categoryName">分类名称</Label>
-                  <Input
-                    id="categoryName"
-                    placeholder="例如：外卖"
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.target.value)
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="categoryType">分类类型</Label>
-                  <Select value={type} onValueChange={(value) => setType(value as CategoryType)}>
-                    <SelectTrigger id="categoryType">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="expense">支出</SelectItem>
-                      <SelectItem value="income">收入</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button type="submit" disabled={isCreating}>
-                  {isCreating ? "创建中..." : "创建分类"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>编辑分类</CardTitle>
-              <CardDescription>可修改名称和启停状态。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {editingId ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="editingCategoryName">名称</Label>
-                    <Input
-                      id="editingCategoryName"
-                      value={editingName}
-                      onChange={(event) => {
-                        setEditingName(event.target.value)
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="editingCategoryStatus">状态</Label>
-                    <Select
-                      value={editingStatus}
-                      onValueChange={(value) => setEditingStatus(value as CategoryStatus)}
-                    >
-                      <SelectTrigger id="editingCategoryStatus">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">启用</SelectItem>
-                        <SelectItem value="inactive">停用</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      onClick={() => void handleSaveEdit()}
-                      disabled={isSavingEdit}
-                    >
-                      {isSavingEdit ? "保存中..." : "保存修改"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingId(null)
-                      }}
-                    >
-                      取消
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  请选择下方分类进入编辑模式。
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
         <Card>
           <CardHeader>
-            <CardTitle>分类列表</CardTitle>
+            <CardTitle>分类筛选</CardTitle>
             <CardDescription>
               可按类型与状态过滤。
               {activeFilterCount > 0 ? ` · ${activeFilterCount} 个筛选条件生效` : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">类型过滤</p>
                 <Select value={filterType} onValueChange={(value) => setFilterType(value as "all" | CategoryType)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -354,7 +301,7 @@ export default function CategoriesPage() {
                   value={filterStatus}
                   onValueChange={(value) => setFilterStatus(value as "all" | CategoryStatus)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -364,24 +311,32 @@ export default function CategoriesPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="flex items-end md:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFilterType("all")
+                    setFilterStatus("all")
+                  }}
+                >
+                  重置筛选
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                {activeFilterCount > 0 ? `已启用 ${activeFilterCount} 个筛选条件` : "当前未启用筛选条件"}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setFilterType("all")
-                  setFilterStatus("all")
-                }}
-              >
-                重置筛选
-              </Button>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              {activeFilterCount > 0 ? `已启用 ${activeFilterCount} 个筛选条件` : "当前未启用筛选条件"}
+            </p>
+          </CardContent>
+        </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>分类列表</CardTitle>
+            <CardDescription>当前展示 {filteredCategories.length} 条分类记录。</CardDescription>
+          </CardHeader>
+          <CardContent>
             {filteredCategories.length === 0 ? (
               <div className="text-sm text-muted-foreground">暂无符合条件的分类。</div>
             ) : (
@@ -429,6 +384,111 @@ export default function CategoriesPage() {
             )}
           </CardContent>
         </Card>
+
+        <Drawer
+          open={drawerMode !== null}
+          direction="right"
+          onOpenChange={(open) => {
+            if (!open) {
+              closeDrawer()
+            }
+          }}
+        >
+          <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md data-[vaul-drawer-direction=right]:lg:max-w-xl">
+            <DrawerHeader>
+              <DrawerTitle>{drawerMode === "create" ? "新增分类" : "编辑分类"}</DrawerTitle>
+              <DrawerDescription>
+                {drawerMode === "create"
+                  ? "创建后可用于新增收入或支出流水。"
+                  : "可修改分类名称和启停状态。"}
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="space-y-4 overflow-y-auto px-4 pb-2">
+              {drawerError ? <p className="text-sm text-destructive">{drawerError}</p> : null}
+
+              {drawerMode === "create" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="createCategoryName">分类名称</Label>
+                    <Input
+                      id="createCategoryName"
+                      placeholder="例如：外卖"
+                      value={createName}
+                      onChange={(event) => {
+                        setCreateName(event.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="createCategoryType">分类类型</Label>
+                    <Select
+                      value={createType}
+                      onValueChange={(value) => setCreateType(value as CategoryType)}
+                    >
+                      <SelectTrigger id="createCategoryType" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="expense">支出</SelectItem>
+                        <SelectItem value="income">收入</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              ) : null}
+
+              {drawerMode === "edit" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="editingCategoryName">名称</Label>
+                    <Input
+                      id="editingCategoryName"
+                      value={editingName}
+                      onChange={(event) => {
+                        setEditingName(event.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editingCategoryStatus">状态</Label>
+                    <Select
+                      value={editingStatus}
+                      onValueChange={(value) => setEditingStatus(value as CategoryStatus)}
+                    >
+                      <SelectTrigger id="editingCategoryStatus" className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">启用</SelectItem>
+                        <SelectItem value="inactive">停用</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              ) : null}
+            </div>
+            <DrawerFooter className="sm:flex-row sm:justify-end">
+              {drawerMode === "create" ? (
+                <Button type="button" disabled={isCreating} onClick={() => void handleCreate()}>
+                  {isCreating ? "创建中..." : "创建分类"}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={isSavingEdit}
+                  onClick={() => void handleSaveEdit()}
+                >
+                  {isSavingEdit ? "保存中..." : "保存修改"}
+                </Button>
+              )}
+              <DrawerClose asChild>
+                <Button type="button" variant="outline" onClick={closeDrawer}>
+                  取消
+                </Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
       </div>
     </LedgerShell>
   )
