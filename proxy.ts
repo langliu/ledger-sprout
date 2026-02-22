@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
-import { createSignInPath } from '@/lib/auth-redirect'
+import { buildCallbackURL, createSignInPath } from '@/lib/auth-redirect'
 
 function hasSessionTokenCookie(request: NextRequest) {
   return request.cookies
@@ -10,16 +10,22 @@ function hasSessionTokenCookie(request: NextRequest) {
 }
 
 export function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl
+
+  if (pathname === '/sign-in' || pathname.startsWith('/api/auth')) {
+    return NextResponse.next()
+  }
+
   if (hasSessionTokenCookie(request)) {
     return NextResponse.next()
   }
 
-  const callbackURL = `${request.nextUrl.pathname}${request.nextUrl.search}`
+  const callbackURL = buildCallbackURL(pathname, search)
   const signInURL = new URL(createSignInPath(callbackURL), request.url)
   return NextResponse.redirect(signInURL)
 }
 
-export const proxyConfig = {
+export const config = {
   matcher: [
     '/dashboard/:path*',
     '/transactions/:path*',

@@ -1,5 +1,9 @@
 export const DEFAULT_CALLBACK_URL = '/dashboard'
 
+function isSignInPath(pathname: string) {
+  return pathname === '/sign-in' || pathname.startsWith('/sign-in/')
+}
+
 export function normalizeCallbackURL(rawCallbackURL: string | null | undefined) {
   if (!rawCallbackURL) {
     return DEFAULT_CALLBACK_URL
@@ -7,6 +11,19 @@ export function normalizeCallbackURL(rawCallbackURL: string | null | undefined) 
 
   const value = rawCallbackURL.trim()
   if (!value.startsWith('/') || value.startsWith('//')) {
+    return DEFAULT_CALLBACK_URL
+  }
+
+  if (value.length > 2048) {
+    return DEFAULT_CALLBACK_URL
+  }
+
+  try {
+    const url = new URL(value, 'http://localhost')
+    if (isSignInPath(url.pathname)) {
+      return DEFAULT_CALLBACK_URL
+    }
+  } catch {
     return DEFAULT_CALLBACK_URL
   }
 
