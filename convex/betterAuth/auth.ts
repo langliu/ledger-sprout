@@ -25,10 +25,14 @@ function normalizeSiteUrl(value?: string) {
   if (trimmed.length === 0) {
     return undefined;
   }
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return trimmed;
+  const normalized = trimmed.startsWith("http://") || trimmed.startsWith("https://")
+    ? trimmed
+    : `https://${trimmed}`;
+  try {
+    return new URL(normalized).origin;
+  } catch {
+    return undefined;
   }
-  return `https://${trimmed}`;
 }
 
 function resolveSiteUrl() {
@@ -44,6 +48,7 @@ function resolveSiteUrl() {
 function resolveTrustedOrigins(siteUrl: string) {
   const candidates = [
     siteUrl,
+    normalizeSiteUrl("https://ledger-sprout.langliu.xyz"),
     normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL),
     normalizeSiteUrl(process.env.SITE_URL),
     normalizeSiteUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL),
