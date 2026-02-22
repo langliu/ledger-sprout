@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireLedgerOwner } from "./lib/auth";
 import { normalizeRequiredName } from "./lib/validation";
@@ -18,10 +19,29 @@ export const list = query({
   handler: async (ctx, args) => {
     await requireLedgerOwner(ctx, args.ledgerId);
 
-    let docs = await ctx.db
-      .query("categories")
-      .withIndex("by_ledger", (q) => q.eq("ledgerId", args.ledgerId))
-      .collect();
+    let docs: Doc<"categories">[];
+    if (args.type !== undefined) {
+      const type = args.type;
+      docs = await ctx.db
+        .query("categories")
+        .withIndex("by_ledger_type", (q) =>
+          q.eq("ledgerId", args.ledgerId).eq("type", type),
+        )
+        .collect();
+    } else if (args.status !== undefined) {
+      const status = args.status;
+      docs = await ctx.db
+        .query("categories")
+        .withIndex("by_ledger_status", (q) =>
+          q.eq("ledgerId", args.ledgerId).eq("status", status),
+        )
+        .collect();
+    } else {
+      docs = await ctx.db
+        .query("categories")
+        .withIndex("by_ledger", (q) => q.eq("ledgerId", args.ledgerId))
+        .collect();
+    }
 
     if (args.type !== undefined) {
       docs = docs.filter((doc) => doc.type === args.type);

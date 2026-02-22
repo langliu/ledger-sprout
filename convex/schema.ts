@@ -69,7 +69,9 @@ const schema = defineSchema({
     updatedAt: v.number(),
   })
     .index("by_ledger_occurredAt", ["ledgerId", "occurredAt"])
-    .index("by_account_occurredAt", ["accountId", "occurredAt"]),
+    .index("by_account_occurredAt", ["accountId", "occurredAt"])
+    .index("by_ledger_type_occurredAt", ["ledgerId", "type", "occurredAt"])
+    .index("by_ledger_category_occurredAt", ["ledgerId", "categoryId", "occurredAt"]),
   tasks: defineTable({
     text: v.string(),
     isCompleted: v.optional(v.boolean()),

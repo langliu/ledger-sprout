@@ -101,13 +101,43 @@ export const list = query({
     const from = args.from ?? 0;
     const to = args.to ?? Number.MAX_SAFE_INTEGER;
 
-    let docs = await ctx.db
-      .query("transactions")
-      .withIndex("by_ledger_occurredAt", (q) =>
-        q.eq("ledgerId", args.ledgerId).gte("occurredAt", from).lte("occurredAt", to),
-      )
-      .order("desc")
-      .collect();
+    // Prefer narrower indexes before applying in-memory filters.
+    let docs: Doc<"transactions">[];
+    if (args.categoryId !== undefined) {
+      const categoryId = args.categoryId;
+      docs = await ctx.db
+        .query("transactions")
+        .withIndex("by_ledger_category_occurredAt", (q) =>
+          q
+            .eq("ledgerId", args.ledgerId)
+            .eq("categoryId", categoryId)
+            .gte("occurredAt", from)
+            .lte("occurredAt", to),
+        )
+        .order("desc")
+        .collect();
+    } else if (args.type !== undefined) {
+      const type = args.type;
+      docs = await ctx.db
+        .query("transactions")
+        .withIndex("by_ledger_type_occurredAt", (q) =>
+          q
+            .eq("ledgerId", args.ledgerId)
+            .eq("type", type)
+            .gte("occurredAt", from)
+            .lte("occurredAt", to),
+        )
+        .order("desc")
+        .collect();
+    } else {
+      docs = await ctx.db
+        .query("transactions")
+        .withIndex("by_ledger_occurredAt", (q) =>
+          q.eq("ledgerId", args.ledgerId).gte("occurredAt", from).lte("occurredAt", to),
+        )
+        .order("desc")
+        .collect();
+    }
 
     if (args.type !== undefined) {
       docs = docs.filter((doc) => doc.type === args.type);

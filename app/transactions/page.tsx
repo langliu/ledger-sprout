@@ -144,7 +144,8 @@ export default function TransactionsPage() {
   const [editingNote, setEditingNote] = useState("")
   const [editingOriginalNote, setEditingOriginalNote] = useState("")
   const [isSavingEdit, setIsSavingEdit] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [pageError, setPageError] = useState<string | null>(null)
+  const [drawerError, setDrawerError] = useState<string | null>(null)
 
   const parsedMinAmount = useMemo(() => {
     return toOptionalMinorUnits(filterMinAmount)
@@ -276,7 +277,7 @@ export default function TransactionsPage() {
     setEditingCategoryId("")
     setEditingNote("")
     setEditingOriginalNote("")
-    setErrorMessage(null)
+    setDrawerError(null)
   }
 
   const startEdit = (transaction: Doc<"transactions">) => {
@@ -290,7 +291,7 @@ export default function TransactionsPage() {
     const note = transaction.note ?? ""
     setEditingNote(note)
     setEditingOriginalNote(note)
-    setErrorMessage(null)
+    setDrawerError(null)
   }
 
   const handleDelete = async (transactionId: Id<"transactions">) => {
@@ -298,7 +299,7 @@ export default function TransactionsPage() {
       return
     }
 
-    setErrorMessage(null)
+    setPageError(null)
     setIsDeletingId(transactionId)
     try {
       await removeTransaction({
@@ -309,9 +310,9 @@ export default function TransactionsPage() {
       }
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
-        setErrorMessage(String(error.message))
+        setPageError(String(error.message))
       } else {
-        setErrorMessage("删除失败，请稍后重试。")
+        setPageError("删除失败，请稍后重试。")
       }
     } finally {
       setIsDeletingId(null)
@@ -323,37 +324,37 @@ export default function TransactionsPage() {
       return
     }
     if (!editingAccountId) {
-      setErrorMessage("请选择账户。")
+      setDrawerError("请选择账户。")
       return
     }
 
     const amount = toMinorUnits(editingAmount)
     if (!amount) {
-      setErrorMessage("金额格式不正确，请输入正数，最多两位小数。")
+      setDrawerError("金额格式不正确，请输入正数，最多两位小数。")
       return
     }
 
     if (!editingOccurredAt || !Number.isFinite(editingOccurredAt) || editingOccurredAt <= 0) {
-      setErrorMessage("日期时间格式不正确。")
+      setDrawerError("日期时间格式不正确。")
       return
     }
 
     if (editingType !== "transfer" && !editingCategoryId) {
-      setErrorMessage("请选择分类。")
+      setDrawerError("请选择分类。")
       return
     }
     if (editingType === "transfer") {
       if (!editingTransferAccountId) {
-        setErrorMessage("请选择转入账户。")
+        setDrawerError("请选择转入账户。")
         return
       }
       if (editingTransferAccountId === editingAccountId) {
-        setErrorMessage("转出账户和转入账户不能相同。")
+        setDrawerError("转出账户和转入账户不能相同。")
         return
       }
     }
 
-    setErrorMessage(null)
+    setDrawerError(null)
     setIsSavingEdit(true)
     try {
       const trimmedNote = editingNote.trim()
@@ -378,9 +379,9 @@ export default function TransactionsPage() {
       resetEditState()
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
-        setErrorMessage(String(error.message))
+        setDrawerError(String(error.message))
       } else {
-        setErrorMessage("更新失败，请稍后重试。")
+        setDrawerError("更新失败，请稍后重试。")
       }
     } finally {
       setIsSavingEdit(false)
@@ -566,19 +567,20 @@ export default function TransactionsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {errorMessage ? <p className="mb-3 text-sm text-destructive">{errorMessage}</p> : null}
+            {pageError ? <p className="mb-3 text-sm text-destructive">{pageError}</p> : null}
             {filterValidationMessage ? (
               <div className="text-sm text-destructive">请先修正金额筛选条件后再查询。</div>
             ) : !transactions || transactions.length === 0 ? (
               <div className="text-sm text-muted-foreground">暂无符合条件的流水。</div>
             ) : (
               <>
-                <Table className="min-w-[860px]">
+                <Table className="min-w-[980px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>日期时间</TableHead>
                       <TableHead>类型</TableHead>
-                      <TableHead>账户/分类</TableHead>
+                      <TableHead>账户</TableHead>
+                      <TableHead>分类</TableHead>
                       <TableHead>备注</TableHead>
                       <TableHead className="text-right">金额</TableHead>
                       <TableHead className="w-44 text-right">操作</TableHead>
@@ -594,16 +596,21 @@ export default function TransactionsPage() {
                       const categoryName = transaction.categoryId
                         ? categoryMap.get(transaction.categoryId)?.name ?? "未分类"
                         : "-"
-                      const detail =
+                      const accountDetail =
                         transaction.type === "transfer"
                           ? `${sourceAccount} -> ${targetAccount ?? "-"}`
-                          : `${sourceAccount} / ${categoryName}`
+                          : sourceAccount
+                      const categoryDetail =
+                        transaction.type === "transfer"
+                          ? "-"
+                          : categoryName
                       const sign = transaction.type === "expense" ? "-" : "+"
                       return (
                         <TableRow key={transaction._id}>
                           <TableCell>{toDateTimeLabel(transaction.occurredAt)}</TableCell>
                           <TableCell>{getTypeLabel(transaction.type)}</TableCell>
-                          <TableCell className="max-w-[260px] truncate">{detail}</TableCell>
+                          <TableCell className="max-w-[260px] truncate">{accountDetail}</TableCell>
+                          <TableCell className="max-w-[160px] truncate">{categoryDetail}</TableCell>
                           <TableCell className="max-w-[240px] truncate">
                             {transaction.note && transaction.note.trim().length > 0 ? transaction.note : "-"}
                           </TableCell>
@@ -680,7 +687,7 @@ export default function TransactionsPage() {
               </DrawerDescription>
             </DrawerHeader>
             <div className="space-y-4 overflow-y-auto px-4 pb-2">
-              {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+              {drawerError ? <p className="text-sm text-destructive">{drawerError}</p> : null}
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">类型</p>
