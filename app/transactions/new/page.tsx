@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { api } from "@/convex/_generated/api"
+import { useAuthRedirect } from "@/hooks/use-auth-redirect"
 import { useCurrentLedger } from "@/hooks/use-current-ledger"
 
 type TransactionType = "expense" | "income" | "transfer"
@@ -69,6 +70,7 @@ function toDateTimeLabel(timestamp: number) {
 export default function NewTransactionPage() {
   const router = useRouter()
   const { session, isSessionPending, currentLedger, ledgerError } = useCurrentLedger()
+  const { isRedirecting } = useAuthRedirect({ session, isSessionPending })
   const createExpense = useMutation(api.transactions.createExpense)
   const createIncome = useMutation(api.transactions.createIncome)
   const createTransfer = useMutation(api.transactions.createTransfer)
@@ -233,31 +235,11 @@ export default function NewTransactionPage() {
     }
   }
 
-  if (isSessionPending) {
+  if (isSessionPending || isRedirecting) {
     return (
       <LedgerShell title="新增记账">
-        <div className="px-4 text-sm text-muted-foreground lg:px-6">正在加载会话...</div>
-      </LedgerShell>
-    )
-  }
-
-  if (!session) {
-    return (
-      <LedgerShell
-        title="新增记账"
-        headerAction={
-          <Button asChild size="sm">
-            <Link href="/sign-in">去登录</Link>
-          </Button>
-        }
-      >
-        <div className="px-4 lg:px-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>请先登录</CardTitle>
-              <CardDescription>登录后才能新增流水记录。</CardDescription>
-            </CardHeader>
-          </Card>
+        <div className="px-4 text-sm text-muted-foreground lg:px-6">
+          {isSessionPending ? "正在加载会话..." : "正在跳转到登录页..."}
         </div>
       </LedgerShell>
     )
@@ -299,7 +281,7 @@ export default function NewTransactionPage() {
                 <div className="space-y-2">
                   <Label htmlFor="type">类型</Label>
                   <Select value={type} onValueChange={(value: TransactionType) => setType(value)}>
-                    <SelectTrigger id="type">
+                    <SelectTrigger id="type" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -331,7 +313,7 @@ export default function NewTransactionPage() {
                     value={accountId}
                     onValueChange={(value) => setAccountId(value as Id<"accounts">)}
                   >
-                    <SelectTrigger id="account">
+                    <SelectTrigger id="account" className="w-full">
                       <SelectValue placeholder="请选择账户" />
                     </SelectTrigger>
                     <SelectContent>
@@ -351,7 +333,7 @@ export default function NewTransactionPage() {
                       value={toAccountId}
                       onValueChange={(value) => setToAccountId(value as Id<"accounts">)}
                     >
-                      <SelectTrigger id="toAccount">
+                      <SelectTrigger id="toAccount" className="w-full">
                         <SelectValue placeholder="请选择转入账户" />
                       </SelectTrigger>
                       <SelectContent>
@@ -372,7 +354,7 @@ export default function NewTransactionPage() {
                       value={categoryId}
                       onValueChange={(value) => setCategoryId(value as Id<"categories">)}
                     >
-                      <SelectTrigger id="category">
+                      <SelectTrigger id="category" className="w-full">
                         <SelectValue placeholder="请选择分类" />
                       </SelectTrigger>
                       <SelectContent>

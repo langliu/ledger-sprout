@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api } from "@/convex/_generated/api"
+import { useAuthRedirect } from "@/hooks/use-auth-redirect"
 import { useCurrentLedger } from "@/hooks/use-current-ledger"
 
 type CategoryType = "expense" | "income"
@@ -43,6 +44,7 @@ function getTypeLabel(type: CategoryType) {
 
 export default function CategoriesPage() {
   const { session, isSessionPending, currentLedger, ledgerError } = useCurrentLedger()
+  const { isRedirecting } = useAuthRedirect({ session, isSessionPending })
   const createCategory = useMutation(api.categories.create)
   const updateCategory = useMutation(api.categories.update)
 
@@ -162,31 +164,11 @@ export default function CategoriesPage() {
     }
   }
 
-  if (isSessionPending) {
+  if (isSessionPending || isRedirecting) {
     return (
       <LedgerShell title="分类管理">
-        <div className="px-4 text-sm text-muted-foreground lg:px-6">正在加载会话...</div>
-      </LedgerShell>
-    )
-  }
-
-  if (!session) {
-    return (
-      <LedgerShell
-        title="分类管理"
-        headerAction={
-          <Button asChild size="sm">
-            <Link href="/sign-in">去登录</Link>
-          </Button>
-        }
-      >
-        <div className="px-4 lg:px-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>请先登录</CardTitle>
-              <CardDescription>登录后才能管理分类。</CardDescription>
-            </CardHeader>
-          </Card>
+        <div className="px-4 text-sm text-muted-foreground lg:px-6">
+          {isSessionPending ? "正在加载会话..." : "正在跳转到登录页..."}
         </div>
       </LedgerShell>
     )

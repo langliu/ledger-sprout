@@ -17,6 +17,12 @@ const transactionTypeValidator = v.union(
   v.literal("transfer"),
 );
 
+function assertNonNegativeIntegerAmount(value: number, fieldName: string) {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new ConvexError(`${fieldName} must be a non-negative integer`);
+  }
+}
+
 async function getAccountOrThrow(ctx: AppCtx, accountId: Id<"accounts">) {
   const account = await ctx.db.get(accountId);
   if (!account) {
@@ -56,6 +62,8 @@ export const list = query({
     categoryId: v.optional(v.id("categories")),
     from: v.optional(v.number()),
     to: v.optional(v.number()),
+    minAmount: v.optional(v.number()),
+    maxAmount: v.optional(v.number()),
     search: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
@@ -70,6 +78,19 @@ export const list = query({
     }
     if (args.from !== undefined && args.to !== undefined && args.from > args.to) {
       throw new ConvexError("from must be less than or equal to to");
+    }
+    if (args.minAmount !== undefined) {
+      assertNonNegativeIntegerAmount(args.minAmount, "minAmount");
+    }
+    if (args.maxAmount !== undefined) {
+      assertNonNegativeIntegerAmount(args.maxAmount, "maxAmount");
+    }
+    if (
+      args.minAmount !== undefined &&
+      args.maxAmount !== undefined &&
+      args.minAmount > args.maxAmount
+    ) {
+      throw new ConvexError("minAmount must be less than or equal to maxAmount");
     }
 
     const limit = args.limit ?? 100;
@@ -100,6 +121,14 @@ export const list = query({
     }
     if (args.categoryId !== undefined) {
       docs = docs.filter((doc) => doc.categoryId === args.categoryId);
+    }
+    const minAmount = args.minAmount;
+    const maxAmount = args.maxAmount;
+    if (minAmount !== undefined) {
+      docs = docs.filter((doc) => doc.amount >= minAmount);
+    }
+    if (maxAmount !== undefined) {
+      docs = docs.filter((doc) => doc.amount <= maxAmount);
     }
     if (args.search !== undefined) {
       const keyword = args.search.trim().toLowerCase();

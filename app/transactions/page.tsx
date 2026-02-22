@@ -17,6 +17,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -33,9 +42,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useAuthRedirect } from "@/hooks/use-auth-redirect"
 import { useCurrentLedger } from "@/hooks/use-current-ledger"
 
 type TransactionFilter = "all" | "expense" | "income" | "transfer"
+type OptionalMinorUnits = number | null | undefined
+
+const PAGE_SIZE = 50
+const MAX_TRANSACTIONS_LIMIT = 500
 
 function toCurrency(minorUnits: number) {
   return new Intl.NumberFormat("zh-CN", {
@@ -51,6 +65,21 @@ function toMinorUnits(amountText: string) {
   }
   const value = Math.round(Number(normalized) * 100)
   return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function toOptionalMinorUnits(amountText: string): OptionalMinorUnits {
+  const normalized = amountText.trim().replace(",", ".")
+  if (!normalized) {
+    return undefined
+  }
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return null
+  }
+  const value = Math.round(Number(normalized) * 100)
+  if (!Number.isFinite(value) || value < 0) {
+    return null
+  }
+  return value
 }
 
 function toDateTimeLabel(timestamp: number) {
@@ -91,6 +120,7 @@ function getTypeLabel(type: "expense" | "income" | "transfer") {
 
 export default function TransactionsPage() {
   const { session, isSessionPending, currentLedger, ledgerError } = useCurrentLedger()
+  const { isRedirecting } = useAuthRedirect({ session, isSessionPending })
   const removeTransaction = useMutation(api.transactions.remove)
   const updateTransaction = useMutation(api.transactions.update)
 
@@ -100,6 +130,9 @@ export default function TransactionsPage() {
   const [filterCategoryId, setFilterCategoryId] = useState<Id<"categories"> | "">("")
   const [filterFromDate, setFilterFromDate] = useState("")
   const [filterToDate, setFilterToDate] = useState("")
+  const [filterMinAmount, setFilterMinAmount] = useState("")
+  const [filterMaxAmount, setFilterMaxAmount] = useState("")
+  const [visibleLimit, setVisibleLimit] = useState(PAGE_SIZE)
   const [isDeletingId, setIsDeletingId] = useState<Id<"transactions"> | null>(null)
   const [editingId, setEditingId] = useState<Id<"transactions"> | null>(null)
   const [editingType, setEditingType] = useState<"expense" | "income" | "transfer" | null>(null)
@@ -113,6 +146,27 @@ export default function TransactionsPage() {
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  const parsedMinAmount = useMemo(() => {
+    return toOptionalMinorUnits(filterMinAmount)
+  }, [filterMinAmount])
+  const parsedMaxAmount = useMemo(() => {
+    return toOptionalMinorUnits(filterMaxAmount)
+  }, [filterMaxAmount])
+  const filterValidationMessage = useMemo(() => {
+    if (parsedMinAmount === null || parsedMaxAmount === null) {
+      return "金额筛选格式不正确，请输入非负数字，最多两位小数。"
+    }
+    if (
+      typeof parsedMinAmount === "number" &&
+      typeof parsedMaxAmount === "number" &&
+      parsedMinAmount > parsedMaxAmount
+    ) {
+      return "最小金额不能大于最大金额。"
+    }
+    return null
+  }, [parsedMaxAmount, parsedMinAmount])
+  const requestLimit = Math.min(visibleLimit, MAX_TRANSACTIONS_LIMIT)
+
   const accounts = useQuery(
     api.accounts.list,
     currentLedger ? { ledgerId: currentLedger._id } : "skip",
@@ -123,7 +177,7 @@ export default function TransactionsPage() {
   )
   const transactions = useQuery(
     api.transactions.list,
-    currentLedger
+    currentLedger && !filterValidationMessage
       ? {
           ledgerId: currentLedger._id,
           type: type === "all" ? undefined : type,
@@ -131,8 +185,10 @@ export default function TransactionsPage() {
           categoryId: filterCategoryId || undefined,
           from: toDayStartTimestamp(filterFromDate),
           to: toDayEndTimestamp(filterToDate),
+          minAmount: typeof parsedMinAmount === "number" ? parsedMinAmount : undefined,
+          maxAmount: typeof parsedMaxAmount === "number" ? parsedMaxAmount : undefined,
           search: search.trim() ? search.trim() : undefined,
-          limit: 200,
+          limit: requestLimit,
         }
       : "skip",
   )
@@ -162,9 +218,24 @@ export default function TransactionsPage() {
       Boolean(filterCategoryId),
       Boolean(filterFromDate),
       Boolean(filterToDate),
+      filterMinAmount.trim().length > 0,
+      filterMaxAmount.trim().length > 0,
       search.trim().length > 0,
     ].filter(Boolean).length
-  }, [filterAccountId, filterCategoryId, filterFromDate, filterToDate, search, type])
+  }, [
+    filterAccountId,
+    filterCategoryId,
+    filterFromDate,
+    filterMaxAmount,
+    filterMinAmount,
+    filterToDate,
+    search,
+    type,
+  ])
+  const hasMoreTransactions =
+    !filterValidationMessage &&
+    (transactions?.length ?? 0) >= requestLimit &&
+    requestLimit < MAX_TRANSACTIONS_LIMIT
 
   useEffect(() => {
     if (editingType !== "transfer") {
@@ -180,6 +251,33 @@ export default function TransactionsPage() {
       setEditingTransferAccountId(editableTransferAccounts[0]._id)
     }
   }, [editableTransferAccounts, editingTransferAccountId, editingType])
+
+  useEffect(() => {
+    setVisibleLimit(PAGE_SIZE)
+  }, [
+    currentLedger?._id,
+    filterAccountId,
+    filterCategoryId,
+    filterFromDate,
+    filterMaxAmount,
+    filterMinAmount,
+    filterToDate,
+    search,
+    type,
+  ])
+
+  const resetEditState = () => {
+    setEditingId(null)
+    setEditingType(null)
+    setEditingAccountId("")
+    setEditingTransferAccountId("")
+    setEditingAmount("")
+    setEditingOccurredAt(null)
+    setEditingCategoryId("")
+    setEditingNote("")
+    setEditingOriginalNote("")
+    setErrorMessage(null)
+  }
 
   const startEdit = (transaction: Doc<"transactions">) => {
     setEditingId(transaction._id)
@@ -207,12 +305,7 @@ export default function TransactionsPage() {
         transactionId,
       })
       if (editingId === transactionId) {
-        setEditingId(null)
-        setEditingType(null)
-        setEditingAccountId("")
-        setEditingTransferAccountId("")
-        setEditingOccurredAt(null)
-        setEditingOriginalNote("")
+        resetEditState()
       }
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
@@ -282,12 +375,7 @@ export default function TransactionsPage() {
             ? { clearNote: true }
             : {}),
       })
-      setEditingId(null)
-      setEditingType(null)
-      setEditingAccountId("")
-      setEditingTransferAccountId("")
-      setEditingOccurredAt(null)
-      setEditingOriginalNote("")
+      resetEditState()
     } catch (error: unknown) {
       if (error && typeof error === "object" && "message" in error) {
         setErrorMessage(String(error.message))
@@ -299,31 +387,11 @@ export default function TransactionsPage() {
     }
   }
 
-  if (isSessionPending) {
+  if (isSessionPending || isRedirecting) {
     return (
       <LedgerShell title="流水记录">
-        <div className="px-4 text-sm text-muted-foreground lg:px-6">正在加载会话...</div>
-      </LedgerShell>
-    )
-  }
-
-  if (!session) {
-    return (
-      <LedgerShell
-        title="流水记录"
-        headerAction={
-          <Button asChild size="sm">
-            <Link href="/sign-in">去登录</Link>
-          </Button>
-        }
-      >
-        <div className="px-4 lg:px-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>请先登录</CardTitle>
-              <CardDescription>登录后才能查看流水记录。</CardDescription>
-            </CardHeader>
-          </Card>
+        <div className="px-4 text-sm text-muted-foreground lg:px-6">
+          {isSessionPending ? "正在加载会话..." : "正在跳转到登录页..."}
         </div>
       </LedgerShell>
     )
@@ -354,41 +422,280 @@ export default function TransactionsPage() {
       }
     >
       <div className="space-y-4 px-4 lg:space-y-6 lg:px-6">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card>
-            <CardHeader>
-              <CardTitle>流水筛选</CardTitle>
-              <CardDescription>支持按类型、账户、分类、日期区间和备注关键词过滤。</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <Card>
+          <CardHeader>
+            <CardTitle>流水筛选</CardTitle>
+            <CardDescription>支持按类型、账户、分类、日期区间和备注关键词过滤。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-6 xl:grid-cols-12">
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <p className="text-sm text-muted-foreground">类型</p>
+                <Select value={type} onValueChange={(value) => setType(value as TransactionFilter)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部</SelectItem>
+                    <SelectItem value="expense">支出</SelectItem>
+                    <SelectItem value="income">收入</SelectItem>
+                    <SelectItem value="transfer">转账</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <p className="text-sm text-muted-foreground">账户</p>
+                <Select
+                  value={filterAccountId || "all"}
+                  onValueChange={(value) =>
+                    setFilterAccountId(value === "all" ? "" : (value as Id<"accounts">))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部账户</SelectItem>
+                    {(accounts ?? []).map((account) => (
+                      <SelectItem key={account._id} value={account._id}>
+                        {account.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <p className="text-sm text-muted-foreground">分类</p>
+                <Select
+                  value={filterCategoryId || "all"}
+                  onValueChange={(value) =>
+                    setFilterCategoryId(value === "all" ? "" : (value as Id<"categories">))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">全部分类</SelectItem>
+                    {(categories ?? [])
+                      .filter((category) =>
+                        type === "all" || type === "transfer" ? true : category.type === type,
+                      )
+                      .map((category) => (
+                        <SelectItem key={category._id} value={category._id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <p className="text-sm text-muted-foreground">开始日期</p>
+                <DatePicker value={filterFromDate} onChange={setFilterFromDate} />
+              </div>
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <p className="text-sm text-muted-foreground">结束日期</p>
+                <DatePicker value={filterToDate} onChange={setFilterToDate} />
+              </div>
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <p className="text-sm text-muted-foreground">最小金额（元）</p>
+                <Input
+                  placeholder="例如 10.00"
+                  value={filterMinAmount}
+                  onChange={(event) => {
+                    setFilterMinAmount(event.target.value)
+                  }}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <p className="text-sm text-muted-foreground">最大金额（元）</p>
+                <Input
+                  placeholder="例如 500.00"
+                  value={filterMaxAmount}
+                  onChange={(event) => {
+                    setFilterMaxAmount(event.target.value)
+                  }}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-4 xl:col-span-10">
+                <p className="text-sm text-muted-foreground">关键词（备注）</p>
+                <Input
+                  placeholder="例如：午饭、地铁、工资"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value)
+                  }}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {activeFilterCount > 0 ? `已启用 ${activeFilterCount} 个筛选条件` : "当前未启用筛选条件"}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setType("all")
+                  setFilterAccountId("")
+                  setFilterCategoryId("")
+                  setFilterFromDate("")
+                  setFilterToDate("")
+                  setFilterMinAmount("")
+                  setFilterMaxAmount("")
+                  setSearch("")
+                  setVisibleLimit(PAGE_SIZE)
+                }}
+              >
+                重置筛选
+              </Button>
+            </div>
+            {filterValidationMessage ? (
+              <p className="mt-3 text-xs text-destructive">{filterValidationMessage}</p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>流水列表</CardTitle>
+            <CardDescription>
+              {transactions?.length ?? 0} 条记录（当前最多加载 {requestLimit} 条）
+              {activeFilterCount > 0 ? ` · ${activeFilterCount} 个筛选条件生效` : ""}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {errorMessage ? <p className="mb-3 text-sm text-destructive">{errorMessage}</p> : null}
+            {filterValidationMessage ? (
+              <div className="text-sm text-destructive">请先修正金额筛选条件后再查询。</div>
+            ) : !transactions || transactions.length === 0 ? (
+              <div className="text-sm text-muted-foreground">暂无符合条件的流水。</div>
+            ) : (
+              <>
+                <Table className="min-w-[860px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>日期时间</TableHead>
+                      <TableHead>类型</TableHead>
+                      <TableHead>账户/分类</TableHead>
+                      <TableHead>备注</TableHead>
+                      <TableHead className="text-right">金额</TableHead>
+                      <TableHead className="w-44 text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((transaction) => {
+                      const sourceAccount =
+                        accountMap.get(transaction.accountId)?.name ?? "未知账户"
+                      const targetAccount = transaction.transferAccountId
+                        ? accountMap.get(transaction.transferAccountId)?.name ?? "未知账户"
+                        : null
+                      const categoryName = transaction.categoryId
+                        ? categoryMap.get(transaction.categoryId)?.name ?? "未分类"
+                        : "-"
+                      const detail =
+                        transaction.type === "transfer"
+                          ? `${sourceAccount} -> ${targetAccount ?? "-"}`
+                          : `${sourceAccount} / ${categoryName}`
+                      const sign = transaction.type === "expense" ? "-" : "+"
+                      return (
+                        <TableRow key={transaction._id}>
+                          <TableCell>{toDateTimeLabel(transaction.occurredAt)}</TableCell>
+                          <TableCell>{getTypeLabel(transaction.type)}</TableCell>
+                          <TableCell className="max-w-[260px] truncate">{detail}</TableCell>
+                          <TableCell className="max-w-[240px] truncate">
+                            {transaction.note && transaction.note.trim().length > 0 ? transaction.note : "-"}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {sign}
+                            {toCurrency(transaction.amount)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex flex-wrap justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => startEdit(transaction)}
+                              >
+                                编辑
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={isDeletingId === transaction._id}
+                                onClick={() => {
+                                  void handleDelete(transaction._id)
+                                }}
+                              >
+                                {isDeletingId === transaction._id ? "删除中..." : "删除"}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    已显示 {transactions.length} 条，最多可加载 {MAX_TRANSACTIONS_LIMIT} 条
+                  </p>
+                  {hasMoreTransactions ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setVisibleLimit((previous) =>
+                          Math.min(previous + PAGE_SIZE, MAX_TRANSACTIONS_LIMIT),
+                        )
+                      }}
+                    >
+                      加载更多
+                    </Button>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Drawer
+          open={Boolean(editingId)}
+          direction="right"
+          onOpenChange={(open) => {
+            if (!open) {
+              resetEditState()
+            }
+          }}
+        >
+          <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md data-[vaul-drawer-direction=right]:lg:max-w-xl">
+            <DrawerHeader>
+              <DrawerTitle>编辑流水</DrawerTitle>
+              <DrawerDescription>
+                可修改金额、日期时间、账户、分类和备注。转账不支持修改分类。
+              </DrawerDescription>
+            </DrawerHeader>
+            <div className="space-y-4 overflow-y-auto px-4 pb-2">
+              {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">类型</p>
-                  <Select value={type} onValueChange={(value) => setType(value as TransactionFilter)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部</SelectItem>
-                      <SelectItem value="expense">支出</SelectItem>
-                      <SelectItem value="income">收入</SelectItem>
-                      <SelectItem value="transfer">转账</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input value={getTypeLabel(editingType ?? "expense")} disabled />
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">账户</p>
                   <Select
-                    value={filterAccountId || "all"}
-                    onValueChange={(value) =>
-                      setFilterAccountId(value === "all" ? "" : (value as Id<"accounts">))
-                    }
+                    value={editingAccountId || undefined}
+                    onValueChange={(value) => setEditingAccountId(value as Id<"accounts">)}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="请选择账户" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">全部账户</SelectItem>
                       {(accounts ?? []).map((account) => (
                         <SelectItem key={account._id} value={account._id}>
                           {account.name}
@@ -397,290 +704,89 @@ export default function TransactionsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">分类</p>
-                  <Select
-                    value={filterCategoryId || "all"}
-                    onValueChange={(value) =>
-                      setFilterCategoryId(value === "all" ? "" : (value as Id<"categories">))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部分类</SelectItem>
-                      {(categories ?? [])
-                        .filter((category) =>
-                          type === "all" || type === "transfer" ? true : category.type === type,
-                        )
-                        .map((category) => (
-                          <SelectItem key={category._id} value={category._id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">开始日期</p>
-                  <DatePicker value={filterFromDate} onChange={setFilterFromDate} />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">结束日期</p>
-                  <DatePicker value={filterToDate} onChange={setFilterToDate} />
-                </div>
-                <div className="space-y-2 sm:col-span-2 xl:col-span-5">
-                  <p className="text-sm text-muted-foreground">关键词（备注）</p>
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-sm text-muted-foreground">金额（元）</p>
                   <Input
-                    placeholder="例如：午饭、地铁、工资"
-                    value={search}
+                    value={editingAmount}
                     onChange={(event) => {
-                      setSearch(event.target.value)
+                      setEditingAmount(event.target.value)
                     }}
                   />
                 </div>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  {activeFilterCount > 0 ? `已启用 ${activeFilterCount} 个筛选条件` : "当前未启用筛选条件"}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setType("all")
-                    setFilterAccountId("")
-                    setFilterCategoryId("")
-                    setFilterFromDate("")
-                    setFilterToDate("")
-                    setSearch("")
-                  }}
-                >
-                  重置筛选
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>编辑流水</CardTitle>
-              <CardDescription>
-                选择列表中的“编辑”可修改金额、日期时间、分类和备注。转账不支持修改分类。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {editingId ? (
-                <>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">类型</p>
-                      <Input value={getTypeLabel(editingType ?? "expense")} disabled />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">账户</p>
-                      <Select
-                        value={editingAccountId || undefined}
-                        onValueChange={(value) => setEditingAccountId(value as Id<"accounts">)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="请选择账户" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(accounts ?? []).map((account) => (
-                            <SelectItem key={account._id} value={account._id}>
-                              {account.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <p className="text-sm text-muted-foreground">金额（元）</p>
-                      <Input
-                        value={editingAmount}
-                        onChange={(event) => {
-                          setEditingAmount(event.target.value)
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <p className="text-sm text-muted-foreground">日期时间</p>
-                      <DateTimePicker value={editingOccurredAt} onChange={setEditingOccurredAt} />
-                    </div>
-                  </div>
-
-                  {editingType === "transfer" ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">转入账户</p>
-                      <Select
-                        value={editingTransferAccountId || undefined}
-                        onValueChange={(value) =>
-                          setEditingTransferAccountId(value as Id<"accounts">)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="请选择转入账户" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {editableTransferAccounts.map((account) => (
-                            <SelectItem key={account._id} value={account._id}>
-                              {account.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : null}
-
-                  {editingType !== "transfer" ? (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">分类</p>
-                      <Select
-                        value={editingCategoryId || undefined}
-                        onValueChange={(value) => setEditingCategoryId(value as Id<"categories">)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="请选择分类" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {editableCategories.map((category) => (
-                            <SelectItem key={category._id} value={category._id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : null}
-
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">备注</p>
-                    <Input
-                      placeholder="删除全部内容后保存可清空备注"
-                      value={editingNote}
-                      onChange={(event) => {
-                        setEditingNote(event.target.value)
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      disabled={isSavingEdit}
-                      onClick={() => void handleSaveEdit()}
-                    >
-                      {isSavingEdit ? "保存中..." : "保存修改"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingId(null)
-                        setEditingType(null)
-                        setEditingAccountId("")
-                        setEditingTransferAccountId("")
-                        setEditingOccurredAt(null)
-                        setEditingOriginalNote("")
-                      }}
-                    >
-                      取消
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                  请选择一条流水进入编辑模式。
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-sm text-muted-foreground">日期时间</p>
+                  <DateTimePicker value={editingOccurredAt} onChange={setEditingOccurredAt} />
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>流水列表</CardTitle>
-            <CardDescription>
-              {transactions?.length ?? 0} 条记录
-              {activeFilterCount > 0 ? ` · ${activeFilterCount} 个筛选条件生效` : ""}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {errorMessage ? <p className="mb-3 text-sm text-destructive">{errorMessage}</p> : null}
-            {!transactions || transactions.length === 0 ? (
-              <div className="text-sm text-muted-foreground">暂无符合条件的流水。</div>
-            ) : (
-              <Table className="min-w-[860px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>日期时间</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead>账户/分类</TableHead>
-                    <TableHead>备注</TableHead>
-                    <TableHead className="text-right">金额</TableHead>
-                    <TableHead className="w-44 text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((transaction) => {
-                    const sourceAccount =
-                      accountMap.get(transaction.accountId)?.name ?? "未知账户"
-                    const targetAccount = transaction.transferAccountId
-                      ? accountMap.get(transaction.transferAccountId)?.name ?? "未知账户"
-                      : null
-                    const categoryName = transaction.categoryId
-                      ? categoryMap.get(transaction.categoryId)?.name ?? "未分类"
-                      : "-"
-                    const detail =
-                      transaction.type === "transfer"
-                        ? `${sourceAccount} -> ${targetAccount ?? "-"}`
-                        : `${sourceAccount} / ${categoryName}`
-                    const sign = transaction.type === "expense" ? "-" : "+"
-                    return (
-                      <TableRow key={transaction._id}>
-                        <TableCell>{toDateTimeLabel(transaction.occurredAt)}</TableCell>
-                        <TableCell>{getTypeLabel(transaction.type)}</TableCell>
-                        <TableCell className="max-w-[260px] truncate">{detail}</TableCell>
-                        <TableCell className="max-w-[240px] truncate">
-                          {transaction.note && transaction.note.trim().length > 0 ? transaction.note : "-"}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {sign}
-                          {toCurrency(transaction.amount)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="inline-flex flex-wrap justify-end gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => startEdit(transaction)}
-                            >
-                              编辑
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              disabled={isDeletingId === transaction._id}
-                              onClick={() => {
-                                void handleDelete(transaction._id)
-                              }}
-                            >
-                              {isDeletingId === transaction._id ? "删除中..." : "删除"}
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+              {editingType === "transfer" ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">转入账户</p>
+                  <Select
+                    value={editingTransferAccountId || undefined}
+                    onValueChange={(value) =>
+                      setEditingTransferAccountId(value as Id<"accounts">)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="请选择转入账户" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {editableTransferAccounts.map((account) => (
+                        <SelectItem key={account._id} value={account._id}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+
+              {editingType !== "transfer" ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">分类</p>
+                  <Select
+                    value={editingCategoryId || undefined}
+                    onValueChange={(value) => setEditingCategoryId(value as Id<"categories">)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="请选择分类" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {editableCategories.map((category) => (
+                        <SelectItem key={category._id} value={category._id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">备注</p>
+                <textarea
+                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px]"
+                  placeholder="删除全部内容后保存可清空备注"
+                  value={editingNote}
+                  onChange={(event) => {
+                    setEditingNote(event.target.value)
+                  }}
+                />
+              </div>
+            </div>
+            <DrawerFooter className="sm:flex-row sm:justify-end">
+              <Button type="button" disabled={isSavingEdit} onClick={() => void handleSaveEdit()}>
+                {isSavingEdit ? "保存中..." : "保存修改"}
+              </Button>
+              <DrawerClose asChild>
+                <Button type="button" variant="outline" onClick={resetEditState}>
+                  取消
+                </Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
       </div>
     </LedgerShell>
   )

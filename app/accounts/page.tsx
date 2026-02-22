@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useAuthRedirect } from "@/hooks/use-auth-redirect"
 import { useCurrentLedger } from "@/hooks/use-current-ledger"
 
 type AccountType = "cash" | "bank" | "credit" | "wallet"
@@ -79,6 +80,7 @@ function getTypeLabel(type: AccountType) {
 
 export default function AccountsPage() {
   const { session, isSessionPending, currentLedger, ledgerError } = useCurrentLedger()
+  const { isRedirecting } = useAuthRedirect({ session, isSessionPending })
   const createAccount = useMutation(api.accounts.create)
   const updateAccount = useMutation(api.accounts.update)
   const adjustBalance = useMutation(api.accounts.adjustBalance)
@@ -257,31 +259,11 @@ export default function AccountsPage() {
     }
   }
 
-  if (isSessionPending) {
+  if (isSessionPending || isRedirecting) {
     return (
       <LedgerShell title="账户管理">
-        <div className="px-4 text-sm text-muted-foreground lg:px-6">正在加载会话...</div>
-      </LedgerShell>
-    )
-  }
-
-  if (!session) {
-    return (
-      <LedgerShell
-        title="账户管理"
-        headerAction={
-          <Button asChild size="sm">
-            <Link href="/sign-in">去登录</Link>
-          </Button>
-        }
-      >
-        <div className="px-4 lg:px-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>请先登录</CardTitle>
-              <CardDescription>登录后才能管理账户。</CardDescription>
-            </CardHeader>
-          </Card>
+        <div className="px-4 text-sm text-muted-foreground lg:px-6">
+          {isSessionPending ? "正在加载会话..." : "正在跳转到登录页..."}
         </div>
       </LedgerShell>
     )
