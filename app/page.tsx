@@ -81,7 +81,22 @@ const sparklineBars = [
   { day: '日', height: 82, id: 'bar-sun' },
 ] as const
 
+const footerPrimaryLinks = [
+  { href: '/sign-in', label: '开始记账' },
+  { href: '/dashboard', label: '我的账本' },
+  { href: '/reports', label: '查看报表' },
+] as const
+
+const footerFeaturePills = [
+  '默认账本自动创建',
+  '按天回溯流水',
+  '月度报表复盘',
+  '登录回跳保护',
+] as const
+
 export default function HomePage() {
+  const currentYear = new Date().getFullYear()
+
   return (
     <main className='relative isolate overflow-hidden bg-[linear-gradient(180deg,#fff7ed_0%,#fffaf3_45%,#ffffff_100%)]'>
       <div className='pointer-events-none absolute inset-0 -z-10'>
@@ -102,47 +117,63 @@ export default function HomePage() {
         </header>
 
         <div className='grid items-start gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-10'>
-          <div>
+          <div className='max-w-4xl'>
             <Badge
-              className='animate-in fade-in-0 slide-in-from-bottom-3 border-amber-700/20 bg-amber-50 text-amber-800 duration-700'
+              className='animate-in fade-in-0 slide-in-from-bottom-3 border-amber-700/20 bg-amber-50 text-[13px] font-medium tracking-[0.01em] text-amber-800 duration-700'
               variant='outline'
             >
-              温柔记账体验 · Next.js 16 + Convex
+              账芽 · 慢慢记，慢慢长
             </Badge>
+            <p
+              className='animate-in fade-in-0 slide-in-from-bottom-4 mt-5 text-[13px] tracking-[0.08em] text-amber-700/85 duration-700'
+              style={{ animationDelay: '70ms', animationFillMode: 'both' }}
+            >
+              LEDGER SPROUT
+            </p>
             <h1
-              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-4 max-w-4xl text-4xl leading-[1.02] font-semibold tracking-tight text-zinc-900 duration-700 text-balance sm:text-5xl lg:text-[4.5rem]'
+              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-3 max-w-4xl text-4xl font-semibold tracking-tight text-zinc-900 duration-700 text-balance sm:text-5xl lg:text-[4.35rem]'
               style={{ animationDelay: '90ms', animationFillMode: 'both' }}
             >
-              像照料一株小苗那样
-              <br />
-              让你的财务慢慢长好
+              <span className='block leading-[1.02]'>账芽 ·</span>
+              <span className='mt-2 block leading-[0.98] text-zinc-900/95'>慢慢记，慢慢长</span>
             </h1>
             <p
-              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-5 max-w-2xl text-sm leading-7 text-zinc-700 duration-700 sm:text-base'
+              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-6 max-w-2xl text-base leading-8 text-zinc-700 duration-700 sm:text-lg sm:leading-8'
               style={{ animationDelay: '170ms', animationFillMode: 'both' }}
             >
               账芽把「记录、分类、复盘」串成一条轻松路径。今天记下一笔，月底就能更从容地安排下一步。
             </p>
             <div
-              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-7 flex flex-col gap-3 sm:flex-row duration-700'
+              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-8 flex flex-col gap-4 sm:flex-row sm:items-end duration-700'
               style={{ animationDelay: '250ms', animationFillMode: 'both' }}
             >
-              <Button asChild className='h-10 bg-amber-700 hover:bg-amber-800'>
-                <Link href='/sign-in'>
-                  开始今天第一笔
-                  <ArrowRight className='size-4' />
-                </Link>
-              </Button>
-              <Button
-                asChild
-                className='h-10 border-rose-900/20 bg-rose-50 text-rose-900 hover:bg-rose-100'
-                variant='outline'
-              >
-                <Link href='/dashboard'>去看看我的账本</Link>
-              </Button>
+              <div className='space-y-1.5'>
+                <Button
+                  asChild
+                  className='h-11 min-w-[11.5rem] rounded-xl bg-amber-700 px-5 text-[15px] font-medium tracking-[0.01em] hover:bg-amber-800'
+                >
+                  <Link className='inline-flex items-baseline gap-2' href='/sign-in'>
+                    <span className='leading-none'>开始今天第一笔</span>
+                    <ArrowRight className='relative top-px size-4' />
+                  </Link>
+                </Button>
+                <p className='pl-1 text-[11px] text-zinc-500'>30 秒完成开账准备</p>
+              </div>
+              <div className='space-y-1.5'>
+                <Button
+                  asChild
+                  className='h-11 min-w-[11.5rem] rounded-xl border-rose-900/20 bg-rose-50 px-5 text-[15px] font-medium tracking-[0.01em] text-rose-900 hover:bg-rose-100'
+                  variant='outline'
+                >
+                  <Link className='inline-flex items-baseline leading-none' href='/dashboard'>
+                    去看看我的账本
+                  </Link>
+                </Button>
+                <p className='pl-1 text-[11px] text-zinc-500'>先看本月收支结构</p>
+              </div>
             </div>
             <div
-              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-5 flex flex-wrap items-center gap-2 duration-700'
+              className='animate-in fade-in-0 slide-in-from-bottom-5 mt-6 flex flex-wrap items-center gap-2 duration-700'
               style={{ animationDelay: '320ms', animationFillMode: 'both' }}
             >
               {['默认账本自动创建', '按天回溯流水', '月度报表复盘'].map((item) => (
@@ -157,7 +188,7 @@ export default function HomePage() {
           </div>
 
           <Card
-            className='animate-in fade-in-0 slide-in-from-right-6 border-amber-900/10 bg-white/85 pt-0 shadow-sm backdrop-blur duration-700'
+            className='animate-in fade-in-0 slide-in-from-right-6 border-amber-900/10 bg-white/85 pt-0 shadow-sm backdrop-blur duration-700 lg:mt-2'
             style={{ animationDelay: '220ms', animationFillMode: 'both' }}
           >
             <CardHeader className='border-b border-amber-900/8 py-4'>
@@ -275,29 +306,101 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className='mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6 lg:pb-24'>
-        <Card className='border-zinc-900/10 bg-[linear-gradient(140deg,rgba(250,252,247,0.9)_0%,rgba(255,246,236,0.92)_100%)]'>
-          <CardHeader>
-            <CardTitle className='text-2xl leading-tight sm:text-3xl'>
+      <section className='mx-auto w-full max-w-6xl px-4 pb-18 sm:px-6 lg:pb-24'>
+        <Card className='relative overflow-hidden border-zinc-900/10 bg-[linear-gradient(140deg,rgba(255,251,245,0.95)_0%,rgba(255,244,231,0.93)_50%,rgba(251,252,248,0.92)_100%)] shadow-[0_12px_36px_-20px_rgba(150,108,46,0.35)]'>
+          <div className='pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(244,185,120,0.32),transparent_65%)] blur-2xl' />
+          <div className='pointer-events-none absolute -left-20 bottom-0 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(228,150,114,0.2),transparent_70%)] blur-2xl' />
+          <CardHeader className='relative space-y-3 pb-4'>
+            <Badge
+              className='w-fit border-amber-700/20 bg-amber-50/80 text-[11px] tracking-[0.06em] text-amber-800'
+              variant='outline'
+            >
+              DAILY RHYTHM
+            </Badge>
+            <CardTitle className='text-3xl leading-[1.15] sm:text-4xl'>
               从今天开始，慢慢把日子记清楚
             </CardTitle>
-            <CardDescription>不追求一次做满，只追求每天都愿意打开它。</CardDescription>
+            <CardDescription className='max-w-2xl text-base leading-7 text-zinc-600'>
+              不追求一次做满，只追求每天都愿意打开它。
+            </CardDescription>
           </CardHeader>
-          <CardContent className='grid gap-4 lg:grid-cols-3'>
+          <CardContent className='relative grid gap-4 lg:grid-cols-3'>
             {processSteps.map((item, index) => (
               <article
-                className='animate-in fade-in-0 slide-in-from-bottom-5 rounded-lg border border-zinc-900/10 bg-white/70 p-4 duration-700'
+                className='group animate-in fade-in-0 slide-in-from-bottom-5 rounded-2xl border border-zinc-900/10 bg-white/78 p-5 shadow-[0_1px_0_rgba(255,255,255,0.8)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:bg-white/95 hover:shadow-[0_14px_28px_-18px_rgba(90,67,39,0.45)]'
                 key={item.step}
                 style={{ animationDelay: `${140 + index * 120}ms`, animationFillMode: 'both' }}
               >
-                <p className='text-xs tracking-widest text-amber-700'>{item.step}</p>
-                <h3 className='mt-2 text-lg font-semibold text-zinc-900'>{item.title}</h3>
-                <p className='mt-2 text-sm leading-6 text-zinc-700'>{item.body}</p>
+                <div className='mb-3 flex items-center justify-between'>
+                  <span className='inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-amber-800'>
+                    {item.step}
+                  </span>
+                  <span className='h-px w-14 bg-gradient-to-r from-amber-300/80 to-transparent' />
+                </div>
+                <h3 className='text-2xl leading-tight font-semibold text-zinc-900 transition-colors duration-300 group-hover:text-amber-800'>
+                  {item.title}
+                </h3>
+                <p className='mt-3 text-base leading-8 text-zinc-700'>{item.body}</p>
               </article>
             ))}
           </CardContent>
         </Card>
       </section>
+
+      <footer className='border-t border-amber-900/10 bg-[linear-gradient(180deg,rgba(255,248,238,0.9)_0%,rgba(255,255,255,0.92)_100%)]'>
+        <div className='mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:gap-10'>
+          <div className='space-y-5'>
+            <div className='flex items-center gap-2 text-sm font-semibold tracking-wide text-zinc-900'>
+              <Leaf className='size-4 text-amber-700' />
+              <span>账芽 Ledger Sprout</span>
+            </div>
+            <p className='max-w-xl text-sm leading-7 text-zinc-700 sm:text-base'>
+              账芽 · 慢慢记，慢慢长。用温柔但清晰的方式，陪你记录每一笔支出。
+            </p>
+            <div className='flex flex-wrap gap-2'>
+              {footerFeaturePills.map((item) => (
+                <span
+                  className='rounded-full border border-amber-200/70 bg-white/75 px-3 py-1 text-xs text-zinc-700'
+                  key={item}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className='grid gap-6 sm:grid-cols-2'>
+            <div className='space-y-3'>
+              <p className='text-xs tracking-[0.08em] text-zinc-500'>快速入口</p>
+              <ul className='space-y-2'>
+                {footerPrimaryLinks.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      className='text-sm text-zinc-700 transition-colors hover:text-amber-700'
+                      href={link.href}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className='space-y-3'>
+              <p className='text-xs tracking-[0.08em] text-zinc-500'>产品定位</p>
+              <p className='text-sm leading-7 text-zinc-700'>
+                面向个人用户的轻量记账工具，围绕“记录-分类-复盘”构建长期可持续的财务习惯。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className='border-t border-amber-900/10'>
+          <div className='mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-4 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:px-6'>
+            <p>© {currentYear} Ledger Sprout. All rights reserved.</p>
+            <p>Built with Next.js 16 · React 19 · Convex</p>
+          </div>
+        </div>
+      </footer>
     </main>
   )
 }
