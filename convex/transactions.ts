@@ -97,72 +97,86 @@ export const list = query({
 
     const from = args.from ?? 0
     const to = args.to ?? Number.MAX_SAFE_INTEGER
+    const keyword = args.search?.trim().toLowerCase()
 
-    // Prefer narrower indexes before applying in-memory filters.
-    let docs: Doc<'transactions'>[]
-    if (args.categoryId !== undefined) {
-      const categoryId = args.categoryId
-      docs = await ctx.db
-        .query('transactions')
-        .withIndex('by_ledger_category_occurredAt', (q) =>
-          q
-            .eq('ledgerId', args.ledgerId)
-            .eq('categoryId', categoryId)
-            .gte('occurredAt', from)
-            .lte('occurredAt', to),
-        )
-        .order('desc')
-        .collect()
-    } else if (args.type !== undefined) {
-      const type = args.type
-      docs = await ctx.db
-        .query('transactions')
-        .withIndex('by_ledger_type_occurredAt', (q) =>
-          q
-            .eq('ledgerId', args.ledgerId)
-            .eq('type', type)
-            .gte('occurredAt', from)
-            .lte('occurredAt', to),
-        )
-        .order('desc')
-        .collect()
-    } else {
-      docs = await ctx.db
+    // Prefer narrower indexes, then only apply in-memory filters when required.
+    const baseQuery = (() => {
+      if (args.categoryId !== undefined) {
+        return ctx.db
+          .query('transactions')
+          .withIndex('by_ledger_category_occurredAt', (q) =>
+            q
+              .eq('ledgerId', args.ledgerId)
+              .eq('categoryId', args.categoryId)
+              .gte('occurredAt', from)
+              .lte('occurredAt', to),
+          )
+          .order('desc')
+      }
+      if (args.type !== undefined) {
+        const type = args.type
+        return ctx.db
+          .query('transactions')
+          .withIndex('by_ledger_type_occurredAt', (q) =>
+            q
+              .eq('ledgerId', args.ledgerId)
+              .eq('type', type)
+              .gte('occurredAt', from)
+              .lte('occurredAt', to),
+          )
+          .order('desc')
+      }
+      return ctx.db
         .query('transactions')
         .withIndex('by_ledger_occurredAt', (q) =>
           q.eq('ledgerId', args.ledgerId).gte('occurredAt', from).lte('occurredAt', to),
         )
         .order('desc')
-        .collect()
+    })()
+
+    const requiresPostFilter =
+      args.accountId !== undefined ||
+      args.minAmount !== undefined ||
+      args.maxAmount !== undefined ||
+      (args.type !== undefined && args.categoryId !== undefined) ||
+      Boolean(keyword && keyword.length > 0)
+
+    if (!requiresPostFilter) {
+      return await baseQuery.take(limit)
     }
 
-    if (args.type !== undefined) {
-      docs = docs.filter((doc) => doc.type === args.type)
-    }
-    if (args.accountId !== undefined) {
-      docs = docs.filter(
-        (doc) => doc.accountId === args.accountId || doc.transferAccountId === args.accountId,
-      )
-    }
-    if (args.categoryId !== undefined) {
-      docs = docs.filter((doc) => doc.categoryId === args.categoryId)
-    }
-    const minAmount = args.minAmount
-    const maxAmount = args.maxAmount
-    if (minAmount !== undefined) {
-      docs = docs.filter((doc) => doc.amount >= minAmount)
-    }
-    if (maxAmount !== undefined) {
-      docs = docs.filter((doc) => doc.amount <= maxAmount)
-    }
-    if (args.search !== undefined) {
-      const keyword = args.search.trim().toLowerCase()
-      if (keyword.length > 0) {
-        docs = docs.filter((doc) => (doc.note ?? '').toLowerCase().includes(keyword))
+    const docs: Doc<'transactions'>[] = []
+    for await (const doc of baseQuery) {
+      if (args.type !== undefined && doc.type !== args.type) {
+        continue
+      }
+      if (
+        args.accountId !== undefined &&
+        doc.accountId !== args.accountId &&
+        doc.transferAccountId !== args.accountId
+      ) {
+        continue
+      }
+      if (args.categoryId !== undefined && doc.categoryId !== args.categoryId) {
+        continue
+      }
+      if (args.minAmount !== undefined && doc.amount < args.minAmount) {
+        continue
+      }
+      if (args.maxAmount !== undefined && doc.amount > args.maxAmount) {
+        continue
+      }
+      if (keyword && keyword.length > 0 && !(doc.note ?? '').toLowerCase().includes(keyword)) {
+        continue
+      }
+
+      docs.push(doc)
+      if (docs.length >= limit) {
+        break
       }
     }
 
-    return docs.slice(0, limit)
+    return docs
   },
 })
 

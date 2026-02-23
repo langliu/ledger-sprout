@@ -35,20 +35,18 @@ export const listAdjustments = query({
         throw new ConvexError('Account does not belong to ledger')
       }
 
-      const docs = await ctx.db
+      return await ctx.db
         .query('balanceAdjustments')
         .withIndex('by_account_createdAt', (q) => q.eq('accountId', accountId))
         .order('desc')
-        .collect()
-      return docs.slice(0, limit)
+        .take(limit)
     }
 
-    const docs = await ctx.db
+    return await ctx.db
       .query('balanceAdjustments')
       .withIndex('by_ledger_createdAt', (q) => q.eq('ledgerId', args.ledgerId))
       .order('desc')
-      .collect()
-    return docs.slice(0, limit)
+      .take(limit)
   },
 })
 
