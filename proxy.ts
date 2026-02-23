@@ -6,7 +6,10 @@ import { buildCallbackURL, createSignInPath } from '@/lib/auth-redirect'
 function hasSessionTokenCookie(request: NextRequest) {
   return request.cookies
     .getAll()
-    .some((cookie) => cookie.name.toLowerCase().includes('session_token'))
+    .some(
+      (cookie) =>
+        cookie.name.toLowerCase().includes('session_token') && cookie.value.trim().length > 0,
+    )
 }
 
 export function proxy(request: NextRequest) {

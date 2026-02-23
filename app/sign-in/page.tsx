@@ -3,7 +3,7 @@
 import { Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -46,6 +46,8 @@ export default function SignInPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { data: session, isPending: isSessionPending } = authClient.useSession()
+  const isLogoutEntry = searchParams.get('logout') === '1'
+  const skipAutoRedirectRef = useRef(isLogoutEntry)
 
   const callbackURL = useMemo(() => {
     return normalizeCallbackURL(searchParams.get('callbackURL'))
@@ -63,12 +65,59 @@ export default function SignInPage() {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
 
   useEffect(() => {
-    if (isSessionPending || !session) {
+    if (!isLogoutEntry) {
       return
     }
 
-    router.replace(callbackURL)
-    router.refresh()
+    skipAutoRedirectRef.current = true
+    let disposed = false
+
+    void authClient
+      .signOut()
+      .catch((error) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Sign out request failed:', error)
+        }
+      })
+      .finally(() => {
+        if (disposed) {
+          return
+        }
+        router.replace('/sign-in')
+        router.refresh()
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [isLogoutEntry, router])
+
+  useEffect(() => {
+    if (skipAutoRedirectRef.current || isSessionPending || !session) {
+      return
+    }
+
+    let disposed = false
+
+    void authClient
+      .getSession()
+      .then((result) => {
+        if (disposed) {
+          return
+        }
+        if (!result.data) {
+          return
+        }
+        router.replace(callbackURL)
+        router.refresh()
+      })
+      .catch(() => {
+        // Keep users on sign-in if session revalidation fails.
+      })
+
+    return () => {
+      disposed = true
+    }
   }, [callbackURL, isSessionPending, router, session])
 
   const handleEmailSignIn = async (event: FormEvent<HTMLFormElement>) => {
@@ -149,10 +198,10 @@ export default function SignInPage() {
     }
   }
 
-  if (!isSessionPending && session) {
+  if (isLogoutEntry) {
     return (
       <div className='flex min-h-screen items-center justify-center px-4'>
-        <p className='text-sm text-muted-foreground'>正在跳转到 {callbackURL}...</p>
+        <p className='text-sm text-muted-foreground'>正在退出登录...</p>
       </div>
     )
   }

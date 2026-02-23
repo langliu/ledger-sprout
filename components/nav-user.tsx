@@ -7,8 +7,6 @@ import {
   IconNotification,
   IconUserCircle,
 } from '@tabler/icons-react'
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -26,7 +24,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { authClient } from '@/lib/auth-client'
 
 export function NavUser({
   user,
@@ -38,8 +35,6 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
-  const router = useRouter()
-  const [isSigningOut, setIsSigningOut] = useState(false)
   const avatarSrc =
     typeof user.avatar === 'string' && user.avatar.trim().length > 0
       ? user.avatar.trim()
@@ -52,21 +47,6 @@ export function NavUser({
     .map((part) => part.charAt(0))
     .join('')
     .toUpperCase()
-
-  const handleSignOut = async () => {
-    if (isSigningOut) {
-      return
-    }
-
-    setIsSigningOut(true)
-    try {
-      await authClient.signOut()
-      router.replace('/sign-in')
-      router.refresh()
-    } finally {
-      setIsSigningOut(false)
-    }
-  }
 
   return (
     <SidebarMenu>
@@ -132,9 +112,14 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={isSigningOut} onSelect={() => void handleSignOut()}>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault()
+                window.location.replace('/sign-in?logout=1')
+              }}
+            >
               <IconLogout />
-              {isSigningOut ? '正在退出...' : '退出登录'}
+              退出登录
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
