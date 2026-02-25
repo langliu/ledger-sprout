@@ -70,6 +70,39 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,
+      requireEmailVerification: true,
+    },
+    emailVerification: {
+      autoSignInAfterVerification: true,
+      sendOnSignUp: true,
+      sendVerificationEmail: async ({ user, url }) => {
+        const resendApiKey = process.env.RESEND_API_KEY
+        if (!resendApiKey) {
+          console.warn('Missing RESEND_API_KEY environment variable.')
+          return
+        }
+        try {
+          const response = await fetch('https://api.resend.com/emails', {
+            body: JSON.stringify({
+              from: '账芽 <no-reply@ledger-sprout.langliu.xyz>',
+              html: `<p>点击下方链接验证您的账芽账号：</p><p><a href="${url}">${url}</a></p>`,
+              subject: '验证您的账芽邮箱',
+              to: user.email,
+            }),
+            headers: {
+              Authorization: `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            method: 'POST',
+          })
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Failed to send validation email:', errorText)
+          }
+        } catch (error) {
+          console.error('Error sending validation email: ', error)
+        }
+      },
     },
     plugins: [convex({ authConfig })],
     secret: process.env.BETTER_AUTH_SECRET,

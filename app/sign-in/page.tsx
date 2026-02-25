@@ -60,6 +60,7 @@ export default function SignInPage() {
   const [registerPassword, setRegisterPassword] = useState('')
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [isEmailLoading, setIsEmailLoading] = useState(false)
   const [isSignUpLoading, setIsSignUpLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
@@ -123,6 +124,7 @@ export default function SignInPage() {
   const handleEmailSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setErrorMessage(null)
+    setSuccessMessage(null)
     setIsEmailLoading(true)
 
     try {
@@ -149,6 +151,7 @@ export default function SignInPage() {
   const handleEmailSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setErrorMessage(null)
+    setSuccessMessage(null)
 
     if (registerPassword.length < 8) {
       setErrorMessage('密码长度至少为 8 位。')
@@ -174,8 +177,9 @@ export default function SignInPage() {
         return
       }
 
-      router.push(callbackURL)
-      router.refresh()
+      setSuccessMessage('注册成功！一封验证邮件已发送到您的邮箱，请点击邮件中的链接完成注册。')
+      setRegisterPassword('')
+      setRegisterConfirmPassword('')
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     } finally {
@@ -185,6 +189,7 @@ export default function SignInPage() {
 
   const handleGoogleSignIn = async () => {
     setErrorMessage(null)
+    setSuccessMessage(null)
     setIsGoogleLoading(true)
 
     try {
@@ -467,6 +472,11 @@ export default function SignInPage() {
             {errorMessage ? (
               <p className='rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive'>
                 {errorMessage}
+              </p>
+            ) : null}
+            {successMessage ? (
+              <p className='rounded-lg border border-emerald-200/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-700'>
+                {successMessage}
               </p>
             ) : null}
           </CardContent>
